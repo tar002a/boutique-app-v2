@@ -23,6 +23,7 @@ if 'logged_in' not in st.session_state:
 
 # --- 2. دوال قاعدة البيانات ---
 def init_db():
+    # ملاحظة: تأكدنا من استخدام نفس اسم قاعدة البيانات للحفاظ على البيانات
     conn = sqlite3.connect('boutique_v3.db', check_same_thread=False)
     c = conn.cursor()
     
@@ -32,13 +33,13 @@ def init_db():
         name TEXT, color TEXT, size TEXT, cost REAL, price REAL, stock INTEGER
     )""")
     
-    # العملاء (جدول جديد)
+    # العملاء
     c.execute("""CREATE TABLE IF NOT EXISTS customers (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT, phone TEXT, address TEXT, username TEXT
     )""")
     
-    # المبيعات (تم ربطها بالعميل)
+    # المبيعات
     c.execute("""CREATE TABLE IF NOT EXISTS sales (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         customer_id INTEGER,
@@ -62,7 +63,7 @@ def login_screen():
         st.title("🔒 نظام نواعم بوتيك")
         password = st.text_input("كلمة المرور", type="password")
         if st.button("دخول"):
-            if password == "1234":  # <--- غير كلمة المرور هنا
+            if password == "1234":  # <--- كلمة المرور
                 st.session_state.logged_in = True
                 st.rerun()
             else:
@@ -83,7 +84,6 @@ def main_app():
     if menu == "🏠 الرئيسية":
         st.title("لوحة المعلومات")
         
-        # إحصائيات سريعة
         date_today = datetime.now().strftime("%Y-%m-%d")
         sales_today = pd.read_sql(f"SELECT SUM(total) as tot, SUM(profit) as prof FROM sales WHERE date LIKE '{date_today}%'", conn)
         low_stock = pd.read_sql("SELECT COUNT(*) FROM variants WHERE stock < 2", conn).iloc[0,0]
@@ -108,7 +108,6 @@ def main_app():
                 mask = df['name'].str.contains(search, case=False) | df['color'].str.contains(search, case=False)
                 df = df[mask]
             
-            # عرض المنتجات للإضافة للسلة
             if not df.empty:
                 product_list = df.apply(lambda x: f"{x['name']} | {x['color']} | {x['size']} ({x['price']:,.0f} د.ع)", axis=1).tolist()
                 selected_prod_str = st.selectbox("اختر قطعة:", options=product_list)
@@ -152,7 +151,6 @@ def main_app():
                 
                 st.markdown("### بيانات العميل والدفع")
                 
-                # اختيار عميل موجود أو جديد
                 cust_choice = st.radio("نوع العميل", ["عميل جديد", "عميل سابق"], horizontal=True)
                 cust_id = None
                 cust_name = ""
@@ -177,13 +175,18 @@ def main_app():
                 
                 # زر إتمام الطلب النهائي
                 if st.button("✅ إتمام الطلب وطباعة"):
-                    # معالجة العميل الجديد إذا لزم الأمر
                     cursor = conn.cursor()
-                    if cust_choice == "عميل جديد" and new_name:
-                        cursor.execute("INSERT INTO customers (name, phone, address) VALUES (?, ?, ?)", 
-                                      (new_name, new_phone, new_addr))
-                        cust_id = cursor.lastrowid
-                        cust_name = new_name
+                    
+                    # معالجة العميل الجديد
+                    if cust_choice == "عميل جديد":
+                        if new_name:
+                            cursor.execute("INSERT INTO customers (name, phone, address) VALUES (?, ?, ?)", 
+                                          (new_name, new_phone, new_addr))
+                            cust_id = cursor.lastrowid
+                            cust_name = new_name
+                        else:
+                            st.error("يرجى كتابة اسم العميل")
+                            st.stop()
                     
                     if cust_id or cust_name:
                         invoice_id = datetime.now().strftime("%Y%m%d%H%M%S")
@@ -192,19 +195,21 @@ def main_app():
                         for item in st.session_state.cart:
                             # خصم المخزون
                             cursor.execute("UPDATE variants SET stock = stock - ? WHERE id = ?", (item['qty'], item['id']))
-                            # تسجيل البيع
+                            
+                            # حساب الربح
                             profit = (item['price'] - item['cost']) * item['qty']
+                            
+                            # تسجيل البيع (تم إصلاح الخطأ هنا باستخدام item['name'])
                             cursor.execute("""INSERT INTO sales (customer_id, variant_id, product_name, qty, total, profit, date, invoice_id) 
                                               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                                           (cust_id, item['id'], item['product_name'], item['qty'], item['total'], profit, date_now, invoice_id))
+                                           (cust_id, item['id'], item['name'], item['qty'], item['total'], profit, date_now, invoice_id))
                         
                         conn.commit()
                         st.session_state.cart = [] # تفريغ السلة
                         st.balloons()
                         st.success(f"تم البيع بنجاح! رقم الفاتورة: {invoice_id}")
-                        # هنا يمكن إضافة كود لتوليد PDF إذا أردت لاحقاً
                     else:
-                        st.error("يجب تحديد بيانات العميل")
+                        st.error("يرجى تحديد العميل")
 
             else:
                 st.write("السلة فارغة")
@@ -213,27 +218,36 @@ def main_app():
     elif menu == "📦 المخزون":
         st.header("إدارة المخزون")
         with st.expander("إضافة منتج جديد (Matrix)", expanded=True):
+            st.info("يمكنك استخدام الفاصلة العربية (،) أو الإنجليزية (,) للفصل بين الألوان والقياسات.")
             with st.form("add_matrix"):
                 c1, c2 = st.columns(2)
                 name = c1.text_input("اسم الموديل")
-                colors = c1.text_input("الألوان (مفصولة بفاصلة)")
-                sizes = c2.text_input("القياسات (مفصولة بفاصلة)")
+                colors = c1.text_input("الألوان (مثال: أحمر، أزرق)")
+                sizes = c2.text_input("القياسات (مثال: S، M، L)")
                 stock = c2.number_input("العدد لكل صنف", 1)
                 cost = c1.number_input("التكلفة", 0.0)
                 price = c2.number_input("سعر البيع", 0.0)
                 
                 if st.form_submit_button("توليد الأصناف"):
-                    clist = [c.strip() for c in colors.split(',') if c.strip()]
-                    slist = [s.strip() for s in sizes.split(',') if s.strip()]
+                    # معالجة الفواصل العربية والإنجليزية
+                    colors_clean = colors.replace('،', ',')
+                    sizes_clean = sizes.replace('،', ',')
+                    
+                    clist = [c.strip() for c in colors_clean.split(',') if c.strip()]
+                    slist = [s.strip() for s in sizes_clean.split(',') if s.strip()]
+                    
                     count = 0
                     cur = conn.cursor()
-                    for c in clist:
-                        for s in slist:
-                            cur.execute("INSERT INTO variants (name, color, size, cost, price, stock) VALUES (?,?,?,?,?,?)",
-                                        (name, c, s, cost, price, stock))
-                            count += 1
-                    conn.commit()
-                    st.success(f"تمت إضافة {count} صنف")
+                    if name and clist and slist:
+                        for c in clist:
+                            for s in slist:
+                                cur.execute("INSERT INTO variants (name, color, size, cost, price, stock) VALUES (?,?,?,?,?,?)",
+                                            (name, c, s, cost, price, stock))
+                                count += 1
+                        conn.commit()
+                        st.success(f"تمت إضافة {count} صنف بنجاح!")
+                    else:
+                        st.error("يرجى ملء جميع الحقول")
         
         st.subheader("المخزون الحالي")
         df_stock = pd.read_sql("SELECT id, name, color, size, price, stock FROM variants", conn)
