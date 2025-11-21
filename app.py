@@ -2,14 +2,13 @@ import streamlit as st
 import sqlite3
 import pandas as pd
 from datetime import datetime
-import pytz # مكتبة المناطق الزمنية
+import pytz
 
 # --- إعداد الصفحة ---
-st.set_page_config(page_title="Nawaem Baghdad System", layout="wide", page_icon="🛍️", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="Nawaem System", layout="wide", page_icon="🛍️", initial_sidebar_state="collapsed")
 
-# --- دالة توقيت بغداد ---
+# --- دالة توقيت بغداد (تعمل في الخلفية فقط) ---
 def get_baghdad_time():
-    # تحديد منطقة بغداد الزمنية
     tz = pytz.timezone('Asia/Baghdad')
     return datetime.now(tz)
 
@@ -113,11 +112,6 @@ def login_screen():
 
 # --- 5. التطبيق الرئيسي ---
 def main_app():
-    # عرض التوقيت الحالي في القائمة الجانبية للتأكد
-    with st.sidebar:
-        baghdad_now = get_baghdad_time()
-        st.info(f"توقيت بغداد: {baghdad_now.strftime('%I:%M %p')}")
-
     tabs = st.tabs(["🛒 بيع", "📋 سجل", "👥 عملاء", "📦 مخزن", "🏠 تقرير"])
 
     # === 1. البيع ===
@@ -133,7 +127,6 @@ def main_app():
                 st.session_state.last_invoice_text = ""
                 st.rerun()
         else:
-            # اختيار المنتجات
             with st.container(border=True):
                 df = pd.read_sql("SELECT * FROM variants WHERE stock > 0", conn)
                 srch = st.text_input("🔍 بحث عن منتج...", label_visibility="collapsed")
@@ -157,7 +150,6 @@ def main_app():
                             })
                             st.toast("تمت الإضافة", icon="✅")
 
-            # السلة وإتمام البيع
             if st.session_state.cart:
                 st.divider()
                 st.markdown("##### بيانات العميل (مطلوب)")
@@ -200,10 +192,9 @@ def main_app():
                         cur.execute("INSERT INTO customers (name, phone, address) VALUES (?,?,?)", (c_n, c_p, c_a))
                         cust_id_val = cur.lastrowid
                     
-                    # --- استخدام توقيت بغداد ---
                     baghdad_now = get_baghdad_time()
                     inv = baghdad_now.strftime("%Y%m%d%H%M")
-                    dt = baghdad_now.strftime("%Y-%m-%d %H:%M") # تخزين التوقيت العراقي
+                    dt = baghdad_now.strftime("%Y-%m-%d %H:%M")
                     
                     for x in st.session_state.cart:
                         cur.execute("UPDATE variants SET stock=stock-? WHERE id=?", (x['qty'], x['id']))
@@ -219,7 +210,7 @@ def main_app():
 
     # === 2. السجل ===
     with tabs[1]:
-        st.caption("آخر 30 عملية بيع (بتوقيت بغداد)")
+        st.caption("آخر 30 عملية بيع")
         df_s = pd.read_sql("""
             SELECT s.*, c.name as customer_name 
             FROM sales s 
@@ -282,11 +273,8 @@ def main_app():
 
     # === 5. تقرير ===
     with tabs[4]:
-        # جلب تاريخ اليوم بتوقيت بغداد
         today_baghdad = get_baghdad_time().strftime("%Y-%m-%d")
-        
         df_tdy = pd.read_sql(f"SELECT SUM(total), SUM(profit) FROM sales WHERE date LIKE '{today_baghdad}%'", conn).iloc[0]
-        
         st.subheader(f"تقرير اليوم: {today_baghdad}")
         st.metric("مبيعات اليوم", f"{df_tdy[0] or 0:,.0f}")
         st.metric("أرباح اليوم", f"{df_tdy[1] or 0:,.0f}")
