@@ -10,7 +10,14 @@ st.markdown("""
 <style>
     .stApp {direction: rtl;}
     div[data-testid="column"] {text-align: right;}
-    .metric-card {background-color: #f0f2f6; padding: 15px; border-radius: 10px; text-align: center;}
+    .stButton button {width: 100%;}
+    .sale-row {
+        background-color: #f0f2f6;
+        padding: 10px;
+        border-radius: 8px;
+        margin-bottom: 8px;
+        border: 1px solid #ddd;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -25,19 +32,17 @@ def init_db():
     conn = sqlite3.connect('boutique_v3.db', check_same_thread=False)
     c = conn.cursor()
     
-    # المنتجات
+    # الجداول (نفس الهيكل السابق)
     c.execute("""CREATE TABLE IF NOT EXISTS variants (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT, color TEXT, size TEXT, cost REAL, price REAL, stock INTEGER
     )""")
     
-    # العملاء
     c.execute("""CREATE TABLE IF NOT EXISTS customers (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT, phone TEXT, address TEXT, username TEXT
     )""")
     
-    # المبيعات
     c.execute("""CREATE TABLE IF NOT EXISTS sales (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         customer_id INTEGER,
@@ -54,7 +59,46 @@ def init_db():
 
 conn = init_db()
 
-# --- 3. شاشة تسجيل الدخول ---
+# --- 3. وظيفة النافذة المنبثقة للتعديل (Dialog) ---
+@st.dialog("تعديل عملية البيع")
+def edit_sale_dialog(sale_id, current_qty, current_total, variant_id, product_name):
+    st.warning(f"تعديل العملية رقم: {sale_id} - المنتج: {product_name}")
+    
+    # خيارات التعديل
+    new_qty = st.number_input("تعديل الكمية", min_value=1, value=int(current_qty))
+    new_total = st.number_input("تعديل السعر الإجمالي", value=float(current_total))
+    
+    col_save, col_del = st.columns(2)
+    
+    # زر الحفظ
+    with col_save:
+        if st.button("💾 حفظ التعديلات", type="primary"):
+            cur = conn.cursor()
+            # حساب فرق المخزون
+            diff = new_qty - int(current_qty)
+            if diff != 0:
+                # إذا زادت الكمية، نخصم من المخزون، والعكس
+                cur.execute("UPDATE variants SET stock = stock - ? WHERE id = ?", (diff, variant_id))
+            
+            # تحديث البيعة
+            cur.execute("UPDATE sales SET qty = ?, total = ? WHERE id = ?", (new_qty, new_total, sale_id))
+            conn.commit()
+            st.success("تم التعديل بنجاح!")
+            st.rerun()
+            
+    # زر الحذف
+    with col_del:
+        if st.button("🗑️ حذف نهائي"):
+            cur = conn.cursor()
+            # استرجاع البضاعة للمخزون
+            cur.execute("UPDATE variants SET stock = stock + ? WHERE id = ?", (int(current_qty), variant_id))
+            # حذف السجل
+            cur.execute("DELETE FROM sales WHERE id = ?", (sale_id,))
+            conn.commit()
+            st.error("تم حذف العملية واسترجاع المخزون!")
+            st.rerun()
+
+# --- 4. شاشة تسجيل الدخول ---
 def login_screen():
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
@@ -67,17 +111,16 @@ def login_screen():
             else:
                 st.error("كلمة المرور خاطئة")
 
-# --- 4. التطبيق الرئيسي ---
+# --- 5. التطبيق الرئيسي ---
 def main_app():
     with st.sidebar:
         st.title("👗 نواعم بوتيك")
-        st.write(f"مرحباً، المدير")
-        menu = st.radio("القائمة", ["🏠 الرئيسية", "🛒 نقطة البيع", "📦 المخزون", "👥 العملاء", "📊 التقارير والتعديل"])
+        menu = st.radio("القائمة", ["🏠 الرئيسية", "🛒 نقطة البيع", "📦 المخزون", "👥 العملاء", "📊 سجل العمليات"])
         if st.button("تسجيل خروج"):
             st.session_state.logged_in = False
             st.rerun()
 
-    # === الصفحة الرئيسية ===
+    # === الرئيسية ===
     if menu == "🏠 الرئيسية":
         st.title("لوحة المعلومات")
         date_today = datetime.now().strftime("%Y-%m-%d")
@@ -97,17 +140,20 @@ def main_app():
         with col_products:
             st.subheader("1. اختر المنتجات")
             df = pd.read_sql("SELECT * FROM variants WHERE stock > 0", conn)
-            search = st.text_input("🔍 بحث سريع...", placeholder="فستان، أحمر...")
+            search = st.text_input("🔍 بحث سريع...", placeholder="اسم، لون...")
             if search:
                 mask = df['name'].str.contains(search, case=False) | df['color'].str.contains(search, case=False)
                 df = df[mask]
             
             if not df.empty:
-                product_list = df.apply(lambda x: f"{x['name']} | {x['color']} | {x['size']} ({x['price']:,.0f})", axis=1).tolist()
-                selected_prod_str = st.selectbox("اختر قطعة:", options=product_list)
+                # قائمة منسدلة ذكية
+                options = df.apply(lambda x: f"{x['id']} - {x['name']} | {x['color']} | {x['size']} ({x['price']:,.0f})", axis=1).tolist()
+                selected_opt = st.selectbox("اختر قطعة:", options=options)
                 
-                if selected_prod_str:
-                    selected_row = df[df.apply(lambda x: f"{x['name']} | {x['color']} | {x['size']} ({x['price']:,.0f})", axis=1) == selected_prod_str].iloc[0]
+                if selected_opt:
+                    sel_id = int(selected_opt.split(' - ')[0])
+                    selected_row = df[df['id'] == sel_id].iloc[0]
+                    
                     c1, c2, c3 = st.columns(3)
                     qty = c1.number_input("الكمية", 1, int(selected_row['stock']), 1)
                     price = c2.number_input("سعر البيع", value=float(selected_row['price']), step=1000.0)
@@ -125,24 +171,24 @@ def main_app():
         with col_cart:
             st.subheader("🛍️ سلة المشتريات")
             if st.session_state.cart:
-                total_cart = sum(item['total'] for item in st.session_state.cart)
                 for item in st.session_state.cart:
                     st.info(f"{item['qty']}x {item['name']} - {item['total']:,.0f}")
+                
+                total_cart = sum(item['total'] for item in st.session_state.cart)
                 st.metric("الإجمالي", f"{total_cart:,.0f} د.ع")
                 
                 if st.button("❌ تفريغ السلة"):
-                    st.session_state.cart = []
-                    st.rerun()
+                    st.session_state.cart = []; st.rerun()
                 
                 st.markdown("---")
-                cust_choice = st.radio("العميل", ["جديد", "سابق"], horizontal=True)
+                cust_choice = st.radio("العميل", ["سابق", "جديد"], horizontal=True)
                 cust_id, cust_name = None, ""
                 
                 if cust_choice == "سابق":
                     customers = pd.read_sql("SELECT id, name, phone FROM customers", conn)
                     if not customers.empty:
-                        selected_cust = st.selectbox("اختر العميل", customers.apply(lambda x: f"{x['name']} - {x['phone']}", axis=1).tolist())
-                        cust_name = selected_cust.split(" - ")[0]
+                        sel_cust = st.selectbox("العميل", customers.apply(lambda x: f"{x['name']} - {x['phone']}", axis=1).tolist())
+                        cust_name = sel_cust.split(" - ")[0]
                         cust_id = customers[customers['name'] == cust_name]['id'].iloc[0]
                 else:
                     new_name = st.text_input("الاسم")
@@ -152,12 +198,11 @@ def main_app():
                 
                 if st.button("✅ إتمام الطلب"):
                     cursor = conn.cursor()
-                    if cust_choice == "جديد":
-                        if new_name:
-                            cursor.execute("INSERT INTO customers (name, phone, address) VALUES (?, ?, ?)", (new_name, new_phone, new_addr))
-                            cust_id = cursor.lastrowid
-                        else:
-                            st.error("أدخل اسم العميل"); st.stop()
+                    if cust_choice == "جديد" and new_name:
+                        cursor.execute("INSERT INTO customers (name, phone, address) VALUES (?, ?, ?)", (new_name, new_phone, new_addr))
+                        cust_id = cursor.lastrowid
+                    elif cust_choice == "جديد" and not new_name:
+                        st.error("اسم العميل مطلوب"); st.stop()
                     
                     invoice_id = datetime.now().strftime("%Y%m%d%H%M%S")
                     date_now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -165,112 +210,75 @@ def main_app():
                     for item in st.session_state.cart:
                         cursor.execute("UPDATE variants SET stock = stock - ? WHERE id = ?", (item['qty'], item['id']))
                         profit = (item['price'] - item['cost']) * item['qty']
-                        cursor.execute("""INSERT INTO sales (customer_id, variant_id, product_name, qty, total, profit, date, invoice_id) 
-                                          VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                        cursor.execute("INSERT INTO sales (customer_id, variant_id, product_name, qty, total, profit, date, invoice_id) VALUES (?,?,?,?,?,?,?,?)",
                                        (cust_id, item['id'], item['name'], item['qty'], item['total'], profit, date_now, invoice_id))
-                    
                     conn.commit()
                     st.session_state.cart = []
                     st.balloons()
-                    st.success(f"تم البيع! فاتورة رقم: {invoice_id}")
+                    st.success(f"فاتورة: {invoice_id}")
 
     # === المخزون ===
     elif menu == "📦 المخزون":
         st.header("إدارة المخزون")
-        with st.expander("إضافة منتج جديد (Matrix)", expanded=True):
+        with st.expander("إضافة منتج جديد", expanded=True):
             with st.form("add_matrix"):
                 c1, c2 = st.columns(2)
                 name = c1.text_input("اسم الموديل")
-                colors = c1.text_input("الألوان (أحمر، أزرق)")
-                sizes = c2.text_input("القياسات (S، M)")
+                colors = c1.text_input("الألوان (،)")
+                sizes = c2.text_input("القياسات (،)")
                 stock = c2.number_input("العدد", 1)
                 cost = c1.number_input("التكلفة", 0.0)
                 price = c2.number_input("البيع", 0.0)
-                
                 if st.form_submit_button("توليد"):
                     colors = colors.replace('،', ',')
                     sizes = sizes.replace('،', ',')
                     clist = [c.strip() for c in colors.split(',') if c.strip()]
                     slist = [s.strip() for s in sizes.split(',') if s.strip()]
-                    count = 0; cur = conn.cursor()
+                    cur = conn.cursor(); count=0
                     for c in clist:
                         for s in slist:
                             cur.execute("INSERT INTO variants (name, color, size, cost, price, stock) VALUES (?,?,?,?,?,?)", (name, c, s, cost, price, stock))
-                            count += 1
+                            count+=1
                     conn.commit()
                     st.success(f"تمت إضافة {count} صنف")
-        
         st.dataframe(pd.read_sql("SELECT * FROM variants", conn), use_container_width=True)
 
     # === العملاء ===
     elif menu == "👥 العملاء":
-        st.header("سجل العملاء")
         st.dataframe(pd.read_sql("SELECT * FROM customers", conn), use_container_width=True)
 
-    # === التقارير والتعديل ===
-    elif menu == "📊 التقارير والتعديل":
-        st.header("أرشيف العمليات")
+    # === سجل العمليات (المعدل) ===
+    elif menu == "📊 سجل العمليات":
+        st.header("أرشيف المبيعات وتعديلها")
         
-        # 1. عرض الجدول
+        # جلب آخر 50 عملية فقط للأداء
         df_sales = pd.read_sql("""
-            SELECT s.id, s.invoice_id, s.date, c.name as customer, s.product_name, s.qty, s.total 
+            SELECT s.id, s.date, c.name as customer, s.product_name, s.qty, s.total, s.variant_id 
             FROM sales s LEFT JOIN customers c ON s.customer_id = c.id 
-            ORDER BY s.id DESC
+            ORDER BY s.id DESC LIMIT 50
         """, conn)
-        st.dataframe(df_sales, use_container_width=True)
+        
+        # عرض الرؤوس
+        cols = st.columns([1, 2, 2, 2, 1, 2, 1.5])
+        headers = ["ID", "التاريخ", "العميل", "المنتج", "الكمية", "الإجمالي", "إجراء"]
+        for col, h in zip(cols, headers):
+            col.markdown(f"**{h}**")
         
         st.markdown("---")
-        st.subheader("⚙️ تعديل أو حذف عملية")
         
-        col_edit_1, col_edit_2 = st.columns(2)
-        with col_edit_1:
-            sale_id_input = st.number_input("أدخل رقم العملية (ID) من الجدول أعلاه:", min_value=0, step=1)
-        
-        if sale_id_input > 0:
-            # جلب بيانات العملية المحددة
-            sale_record = pd.read_sql(f"SELECT * FROM sales WHERE id = {sale_id_input}", conn)
+        # عرض الصفوف مع زر التعديل
+        for index, row in df_sales.iterrows():
+            c1, c2, c3, c4, c5, c6, c7 = st.columns([1, 2, 2, 2, 1, 2, 1.5])
+            c1.write(str(row['id']))
+            c2.write(row['date'].split()[0]) # عرض التاريخ بدون الوقت
+            c3.write(row['customer'])
+            c4.write(row['product_name'])
+            c5.write(str(row['qty']))
+            c6.write(f"{row['total']:,.0f}")
             
-            if not sale_record.empty:
-                sale_data = sale_record.iloc[0]
-                st.info(f"عملية رقم {sale_id_input}: {sale_data['product_name']} - الكمية: {sale_data['qty']} - العميل: {sale_data['customer_id']}")
-                
-                col_act1, col_act2 = st.columns(2)
-                
-                # --- خيار الحذف ---
-                with col_act2:
-                    if st.button("🗑️ حذف العملية نهائياً", type="primary"):
-                        cur = conn.cursor()
-                        # 1. استرجاع المخزون
-                        cur.execute("UPDATE variants SET stock = stock + ? WHERE id = ?", (int(sale_data['qty']), int(sale_data['variant_id'])))
-                        # 2. حذف السجل
-                        cur.execute("DELETE FROM sales WHERE id = ?", (sale_id_input,))
-                        conn.commit()
-                        st.success("تم حذف العملية واسترجاع البضاعة للمخزون!")
-                        st.rerun()
-
-                # --- خيار التعديل ---
-                with col_act1:
-                    with st.expander("تعديل البيانات"):
-                        with st.form("edit_sale"):
-                            new_qty = st.number_input("الكمية الجديدة", min_value=1, value=int(sale_data['qty']))
-                            new_total = st.number_input("السعر الإجمالي الجديد", value=float(sale_data['total']))
-                            
-                            if st.form_submit_button("حفظ التعديلات"):
-                                cur = conn.cursor()
-                                # معالجة فرق المخزون
-                                old_qty = int(sale_data['qty'])
-                                diff = new_qty - old_qty
-                                
-                                # إذا زادت الكمية، نخصم من المخزون. إذا نقصت، نعيد للمخزون
-                                if diff != 0:
-                                    cur.execute("UPDATE variants SET stock = stock - ? WHERE id = ?", (diff, int(sale_data['variant_id'])))
-                                
-                                cur.execute("UPDATE sales SET qty = ?, total = ? WHERE id = ?", (new_qty, new_total, sale_id_input))
-                                conn.commit()
-                                st.success("تم تعديل العملية وتحديث المخزون!")
-                                st.rerun()
-            else:
-                st.warning("رقم العملية غير موجود")
+            # زر التعديل الذي يفتح النافذة المنبثقة
+            if c7.button("⚙️ تعديل", key=f"btn_{row['id']}"):
+                edit_sale_dialog(row['id'], row['qty'], row['total'], row['variant_id'], row['product_name'])
 
 if __name__ == "__main__":
     if st.session_state.logged_in:
