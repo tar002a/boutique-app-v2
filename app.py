@@ -3,10 +3,9 @@ import sqlite3
 import pandas as pd
 from datetime import datetime
 import pytz
-import io # للمساعدة في تحميل الملفات
 
 # --- إعداد الصفحة ---
-st.set_page_config(page_title="Nawaem Ultimate", layout="wide", page_icon="💎", initial_sidebar_state="expanded")
+st.set_page_config(page_title="Nawaem System", layout="wide", page_icon="📊", initial_sidebar_state="collapsed")
 
 # --- دالة توقيت بغداد ---
 def get_baghdad_time():
@@ -24,30 +23,35 @@ st.markdown("""
         border-radius: 10px;
         font-weight: bold;
     }
-    /* تمييز القطع التي أوشكت على النفاذ */
-    .low-stock {
-        color: #d32f2f;
-        font-weight: bold;
-        border: 1px solid #d32f2f;
-        padding: 2px 5px;
-        border-radius: 5px;
+    .stock-card {
+        background-color: #f9f9f9;
+        padding: 10px;
+        border-radius: 10px;
+        border: 1px solid #eee;
+        margin-bottom: 10px;
     }
-    .metric-card {
+    /* تنسيق خاص للأرقام المالية */
+    div[data-testid="metric-container"] {
         background-color: #f0f2f6;
         padding: 10px;
         border-radius: 8px;
         text-align: center;
+        border: 1px solid #e0e0e0;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# --- إدارة الجلسة ---
-if 'cart' not in st.session_state: st.session_state.cart = []
-if 'logged_in' not in st.session_state: st.session_state.logged_in = False
-if 'sale_success' not in st.session_state: st.session_state.sale_success = False
-if 'last_invoice_text' not in st.session_state: st.session_state.last_invoice_text = ""
+# --- 1. إدارة الجلسة ---
+if 'cart' not in st.session_state:
+    st.session_state.cart = []
+if 'logged_in' not in st.session_state:
+    st.session_state.logged_in = False
+if 'sale_success' not in st.session_state:
+    st.session_state.sale_success = False
+if 'last_invoice_text' not in st.session_state:
+    st.session_state.last_invoice_text = ""
 
-# --- قاعدة البيانات ---
+# --- 2. قاعدة البيانات ---
 def init_db():
     conn = sqlite3.connect('boutique_v3.db', check_same_thread=False)
     c = conn.cursor()
@@ -61,31 +65,28 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT, customer_id INTEGER, variant_id INTEGER, product_name TEXT, 
         qty INTEGER, total REAL, profit REAL, date TEXT, invoice_id TEXT
     )""")
-    # جدول جديد للمصاريف
-    c.execute("""CREATE TABLE IF NOT EXISTS expenses (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, description TEXT, amount REAL, date TEXT
-    )""")
     conn.commit()
     return conn
 
 conn = init_db()
 
-# --- النوافذ المنبثقة ---
+# --- 3. النوافذ المنبثقة ---
 @st.dialog("تعديل عملية بيع")
 def edit_sale_dialog(sale_id, current_qty, current_total, variant_id, product_name):
-    st.warning(f"تعديل فاتورة: {product_name}")
+    st.warning(f"فاتورة: {product_name}")
     new_qty = st.number_input("الكمية", min_value=1, value=int(current_qty))
     new_total = st.number_input("الإجمالي", value=float(current_total))
     c1, c2 = st.columns(2)
     with c1:
-        if st.button("💾 حفظ التعديل", type="primary"):
+        if st.button("💾 حفظ", type="primary"):
             cur = conn.cursor()
             diff = new_qty - int(current_qty)
-            if diff != 0: cur.execute("UPDATE variants SET stock = stock - ? WHERE id = ?", (diff, variant_id))
+            if diff != 0:
+                cur.execute("UPDATE variants SET stock = stock - ? WHERE id = ?", (diff, variant_id))
             cur.execute("UPDATE sales SET qty = ?, total = ? WHERE id = ?", (new_qty, new_total, sale_id))
             conn.commit(); st.rerun()
     with c2:
-        if st.button("🗑️ حذف البيعة"):
+        if st.button("🗑️ حذف"):
             cur = conn.cursor()
             cur.execute("UPDATE variants SET stock = stock + ? WHERE id = ?", (int(current_qty), variant_id))
             cur.execute("DELETE FROM sales WHERE id = ?", (sale_id,))
@@ -110,44 +111,30 @@ def edit_stock_dialog(item_id, name, color, size, cost, price, stock):
         conn.execute("DELETE FROM variants WHERE id=?", (item_id,))
         conn.commit(); st.rerun()
 
-# --- تسجيل الدخول ---
+# --- 4. تسجيل الدخول ---
 def login_screen():
-    st.title("💎 نواعم بوتيك - النظام المتكامل")
+    st.title("🌸 نواعم بوتيك")
     if st.button("دخول للنظام"):
         st.session_state.logged_in = True
         st.rerun()
 
-# --- التطبيق الرئيسي ---
+# --- 5. التطبيق الرئيسي ---
 def main_app():
-    # === القائمة الجانبية (Backup) ===
-    with st.sidebar:
-        st.header("نسخ احتياطي 💾")
-        st.info("احفظ بياناتك دائماً!")
-        
-        # تصدير المبيعات
-        df_sales_export = pd.read_sql("SELECT * FROM sales", conn)
-        csv_sales = df_sales_export.to_csv(index=False).encode('utf-8-sig')
-        st.download_button("📥 تحميل سجل المبيعات (Excel)", data=csv_sales, file_name="sales_backup.csv", mime="text/csv")
-        
-        # تصدير المخزون
-        df_stock_export = pd.read_sql("SELECT * FROM variants", conn)
-        csv_stock = df_stock_export.to_csv(index=False).encode('utf-8-sig')
-        st.download_button("📥 تحميل جرد المخزون (Excel)", data=csv_stock, file_name="stock_backup.csv", mime="text/csv")
-
-    tabs = st.tabs(["🛒 بيع", "📋 سجل", "💸 مصاريف", "👥 عملاء", "📦 مخزن", "📊 تقارير"])
+    tabs = st.tabs(["🛒 بيع", "📋 سجل", "👥 عملاء", "📦 مخزن", "📊 تقارير ذكية"])
 
     # === 1. البيع ===
     with tabs[0]:
         if st.session_state.sale_success:
-            st.success("✅ تم الحجز بنجاح!")
+            st.success("✅ تم حجز الطلب!")
             st.balloons()
+            st.markdown("### 📋 انسخ الرسالة:")
             st.code(st.session_state.last_invoice_text, language="text")
             if st.button("🔄 طلب جديد", type="primary"):
                 st.session_state.sale_success = False; st.session_state.last_invoice_text = ""; st.rerun()
         else:
             with st.container(border=True):
                 df = pd.read_sql("SELECT * FROM variants WHERE stock > 0", conn)
-                srch = st.text_input("🔍 بحث سريع...", label_visibility="collapsed")
+                srch = st.text_input("🔍 بحث...", label_visibility="collapsed")
                 if srch:
                     mask = df['name'].str.contains(srch, case=False) | df['color'].str.contains(srch, case=False)
                     df = df[mask]
@@ -162,7 +149,7 @@ def main_app():
                         p = c2.number_input("سعر", value=float(r['price']))
                         if st.button("أضف للسلة ➕", type="secondary"):
                             st.session_state.cart.append({"id": int(r['id']), "name": r['name'], "color": r['color'], "size": r['size'], "cost": r['cost'], "price": p, "qty": q, "total": p*q})
-                            st.toast("تم!", icon="✅")
+                            st.toast("تمت الإضافة", icon="✅")
 
             if st.session_state.cart:
                 st.divider()
@@ -178,7 +165,9 @@ def main_app():
                             cust_id_val = curr_custs[curr_custs['name'] == cust_name_val]['id'].iloc[0]
                         else: st.warning("لا يوجد")
                     else:
-                        c_n = st.text_input("الاسم"); c_p = st.text_input("الهاتف"); c_a = st.text_input("العنوان")
+                        c_n = st.text_input("الاسم")
+                        c_p = st.text_input("الهاتف")
+                        c_a = st.text_input("العنوان")
                         cust_name_val = c_n
                 
                 tot = 0; invoice_msg = "تم حجز الطلب ✅\n"
@@ -189,8 +178,8 @@ def main_app():
                 invoice_msg += f"{tot:,.0f}\nالتوصيل مجاني\nالف عافية حياتي 🌸🌸🌸🌸"
                 st.markdown(f"**الإجمالي: {tot:,.0f} د.ع**")
 
-                if st.button("✅ إتمام ونسخ", type="primary"):
-                    if not cust_name_val: st.error("مطلوب اسم العميل"); st.stop()
+                if st.button("✅ إتمام البيع ونسخ", type="primary"):
+                    if not cust_name_val: st.error("الاسم مطلوب!"); st.stop()
                     cur = conn.cursor()
                     if cust_type == "جديد":
                         cur.execute("INSERT INTO customers (name, phone, address) VALUES (?,?,?)", (c_n, c_p, c_a))
@@ -206,7 +195,7 @@ def main_app():
 
     # === 2. السجل ===
     with tabs[1]:
-        st.caption("سجل المبيعات")
+        st.caption("آخر العمليات")
         df_s = pd.read_sql("SELECT s.*, c.name as customer_name FROM sales s LEFT JOIN customers c ON s.customer_id = c.id ORDER BY s.id DESC LIMIT 30", conn)
         for i, r in df_s.iterrows():
             with st.container(border=True):
@@ -216,33 +205,15 @@ def main_app():
                 c1.caption(f"👤 {c_name} | 💰 {r['total']:,.0f}")
                 if c2.button("⚙️", key=f"e{r['id']}"): edit_sale_dialog(r['id'], r['qty'], r['total'], r['variant_id'], r['product_name'])
 
-    # === 3. المصاريف (جديد) ===
+    # === 3. العملاء ===
     with tabs[2]:
-        st.header("💸 تسجيل المصروفات")
-        with st.form("exp_form"):
-            c_ex1, c_ex2 = st.columns(2)
-            desc = c_ex1.text_input("بند الصرف (مثلاً: انترنت، أكياس)")
-            amount = c_ex2.number_input("المبلغ", min_value=0.0, step=1000.0)
-            if st.form_submit_button("تسجيل مصروف"):
-                dt = get_baghdad_time().strftime("%Y-%m-%d %H:%M")
-                conn.execute("INSERT INTO expenses (description, amount, date) VALUES (?,?,?)", (desc, amount, dt))
-                conn.commit(); st.success("تم التسجيل"); st.rerun()
-        
-        st.divider()
-        st.subheader("سجل المصاريف")
-        df_exp = pd.read_sql("SELECT * FROM expenses ORDER BY id DESC LIMIT 20", conn)
-        if not df_exp.empty: st.dataframe(df_exp, use_container_width=True)
-        else: st.info("لا توجد مصاريف مسجلة")
-
-    # === 4. العملاء ===
-    with tabs[3]:
         df_cust = pd.read_sql("SELECT * FROM customers ORDER BY id DESC", conn)
         if not df_cust.empty: st.dataframe(df_cust, use_container_width=True)
         else: st.info("فارغ")
 
-    # === 5. المخزون (تنبيهات النواقص) ===
-    with tabs[4]:
-        with st.expander("➕ إضافة بضاعة"):
+    # === 4. المخزون ===
+    with tabs[3]:
+        with st.expander("➕ إضافة جديد"):
             with st.form("add"):
                 nm = st.text_input("اسم"); cl = st.text_input("ألوان (،)"); sz = st.text_input("قياسات (،)")
                 stk = st.number_input("عدد", 1); pr = st.number_input("بيع", 0.0); cst = st.number_input("كلفة", 0.0)
@@ -252,7 +223,6 @@ def main_app():
                             if c.strip() and s.strip(): conn.execute("INSERT INTO variants (name,color,size,stock,price,cost) VALUES (?,?,?,?,?,?)", (nm, c.strip(), s.strip(), stk, pr, cst))
                     conn.commit(); st.rerun()
         st.divider()
-        
         df_inv = pd.read_sql("SELECT * FROM variants WHERE stock > 0 ORDER BY name", conn)
         if not df_inv.empty:
             for p in df_inv['name'].unique():
@@ -260,45 +230,79 @@ def main_app():
                     pdf = df_inv[df_inv['name']==p]
                     st.markdown(f"#### 👗 {p}")
                     for c in pdf['color'].unique():
-                        # منطق تمييز المخزون المنخفض
-                        items = []
-                        for _,r in pdf[pdf['color']==c].iterrows():
-                            stock_num = r['stock']
-                            # إذا المخزون أقل من 3 نلونه بالأحمر
-                            style_class = "color: red; font-weight: bold;" if stock_num < 3 else ""
-                            icon = "⚠️" if stock_num < 3 else ""
-                            items.append(f"<span style='{style_class}'>{r['size']} ({stock_num}) {icon}</span>")
-                        
-                        szs = " | ".join(items)
-                        st.markdown(f"🎨 **{c}:** {szs}", unsafe_allow_html=True)
-                    
+                        szs = " | ".join([f"{r['size']} ({r['stock']})" for _,r in pdf[pdf['color']==c].iterrows()])
+                        st.markdown(f"🎨 {c}: {szs}")
                     with st.expander("تعديل"):
                         for _,r in pdf.iterrows():
                             if st.button(f"{r['color']} {r['size']}", key=f"bx{r['id']}"): edit_stock_dialog(r['id'], r['name'], r['color'], r['size'], r['cost'], r['price'], r['stock'])
 
-    # === 6. التقارير (الصافي الحقيقي) ===
-    with tabs[5]:
-        st.header("📊 الأداء المالي")
+    # === 5. التقارير الذكية (تم التطوير هنا) ===
+    with tabs[4]:
+        st.header("📊 ذكاء الأعمال (BI)")
+        
+        # 1. ملخص اليوم
         today_baghdad = get_baghdad_time().strftime("%Y-%m-%d")
+        df_tdy = pd.read_sql(f"SELECT SUM(total), SUM(profit) FROM sales WHERE date LIKE '{today_baghdad}%'", conn).iloc[0]
         
-        # المبيعات والأرباح التشغيلية
-        sales_data = pd.read_sql(f"SELECT SUM(total), SUM(profit) FROM sales WHERE date LIKE '{today_baghdad}%'", conn).iloc[0]
-        total_sales = sales_data[0] or 0
-        gross_profit = sales_data[1] or 0
+        st.subheader(f"📅 أداء اليوم ({today_baghdad})")
+        col_t1, col_t2 = st.columns(2)
+        col_t1.metric("مبيعات اليوم", f"{df_tdy[0] or 0:,.0f} د.ع")
+        col_t2.metric("أرباح اليوم الصافية", f"{df_tdy[1] or 0:,.0f} د.ع", help="الربح بعد خصم تكلفة القطعة")
         
-        # المصاريف
-        exp_data = pd.read_sql(f"SELECT SUM(amount) FROM expenses WHERE date LIKE '{today_baghdad}%'", conn).iloc[0]
-        total_exp = exp_data[0] or 0
+        st.markdown("---")
         
-        # الصافي الحقيقي
-        net_profit = gross_profit - total_exp
+        # 2. تقييم المخزون (Assets Valuation)
+        st.subheader("📦 القيمة المالية للمخزون (رأس المال)")
+        # حساب تكلفة المخزون وسعر البيع المتوقع
+        df_stock_val = pd.read_sql("""
+            SELECT 
+                SUM(stock * cost) as total_cost,
+                SUM(stock * price) as total_revenue
+            FROM variants
+        """, conn).iloc[0]
         
-        c1, c2, c3 = st.columns(3)
-        c1.metric("مبيعات اليوم", f"{total_sales:,.0f}")
-        c2.metric("مصاريف اليوم", f"{total_exp:,.0f}", delta_color="inverse")
-        c3.metric("الربح الصافي (الحقيقي)", f"{net_profit:,.0f}", delta="الخلاصة")
+        total_cost_stock = df_stock_val['total_cost'] or 0
+        total_rev_stock = df_stock_val['total_revenue'] or 0
+        potential_profit = total_rev_stock - total_cost_stock
         
-        st.caption("* الربح الصافي = (المبيعات - تكلفة البضاعة) - المصاريف (إيجار، انترنت..)")
+        col_s1, col_s2, col_s3 = st.columns(3)
+        col_s1.metric("رأس المال المجمد (التكلفة)", f"{total_cost_stock:,.0f} د.ع", help="مجموع المبالغ التي دفعتها لشراء البضاعة الحالية")
+        col_s2.metric("المبيعات المتوقعة", f"{total_rev_stock:,.0f} د.ع", help="المبلغ الذي ستحصل عليه لو بعت كل شيء")
+        col_s3.metric("الربح الكامن", f"{potential_profit:,.0f} د.ع", delta="مكسب مستقبلي", help="الربح الذي ستحققه عند بيع المخزون بالكامل")
+        
+        st.markdown("---")
+        
+        # 3. الأفضل مبيعاً والزبائن
+        c_best1, c_best2 = st.columns(2)
+        
+        with c_best1:
+            st.subheader("🏆 أكثر القطع مبيعاً")
+            df_top_items = pd.read_sql("""
+                SELECT product_name as 'المنتج', SUM(qty) as 'العدد المباع' 
+                FROM sales 
+                GROUP BY product_name 
+                ORDER BY SUM(qty) DESC 
+                LIMIT 5
+            """, conn)
+            if not df_top_items.empty:
+                st.dataframe(df_top_items, use_container_width=True, hide_index=True)
+            else:
+                st.info("لا توجد بيانات كافية")
+                
+        with c_best2:
+            st.subheader("🌟 أفضل الزبائن")
+            df_top_cust = pd.read_sql("""
+                SELECT c.name as 'العميل', SUM(s.total) as 'مجموع الشراء'
+                FROM sales s
+                JOIN customers c ON s.customer_id = c.id
+                GROUP BY c.name
+                ORDER BY SUM(s.total) DESC
+                LIMIT 5
+            """, conn)
+            if not df_top_cust.empty:
+                st.dataframe(df_top_cust, use_container_width=True, hide_index=True)
+            else:
+                st.info("لا توجد بيانات كافية")
 
 if __name__ == "__main__":
     if st.session_state.logged_in:
