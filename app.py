@@ -7,7 +7,7 @@ import pytz
 # --- إعداد الصفحة ---
 st.set_page_config(page_title="Nawaem System", layout="wide", page_icon="🛍️", initial_sidebar_state="collapsed")
 
-# --- دالة توقيت بغداد (تعمل في الخلفية فقط) ---
+# --- دالة توقيت بغداد ---
 def get_baghdad_time():
     tz = pytz.timezone('Asia/Baghdad')
     return datetime.now(tz)
@@ -62,7 +62,7 @@ def init_db():
 
 conn = init_db()
 
-# --- 3. النوافذ المنبثقة ---
+# --- 3. النوافذ المنبثقة (بدون بالونات) ---
 @st.dialog("تعديل عملية بيع")
 def edit_sale_dialog(sale_id, current_qty, current_total, variant_id, product_name):
     st.warning(f"فاتورة: {product_name}")
@@ -98,7 +98,7 @@ def edit_stock_dialog(item_id, name, color, size, cost, price, stock):
         if st.form_submit_button("💾 حفظ"):
             conn.execute("UPDATE variants SET name=?, color=?, size=?, cost=?, price=?, stock=? WHERE id=?", 
                          (n_name, n_col, n_siz, n_cst, n_prc, n_stk, item_id))
-            conn.commit(); st.success("تم"); st.rerun()
+            conn.commit(); st.rerun()
     if st.button("🗑️ حذف نهائي"):
         conn.execute("DELETE FROM variants WHERE id=?", (item_id,))
         conn.commit(); st.rerun()
@@ -118,7 +118,7 @@ def main_app():
     with tabs[0]:
         if st.session_state.sale_success:
             st.success("✅ تم حجز الطلب وحفظ البيانات!")
-            st.balloons()
+            st.balloons()  # <--- البالونات هنا فقط
             st.markdown("### 📋 انسخ الرسالة:")
             st.code(st.session_state.last_invoice_text, language="text")
             
@@ -210,7 +210,7 @@ def main_app():
 
     # === 2. السجل ===
     with tabs[1]:
-        st.caption("آخر 30 عملية بيع")
+        st.caption("آخر 30 عملية بيع (بتوقيت بغداد)")
         df_s = pd.read_sql("""
             SELECT s.*, c.name as customer_name 
             FROM sales s 
