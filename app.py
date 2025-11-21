@@ -2,9 +2,16 @@ import streamlit as st
 import sqlite3
 import pandas as pd
 from datetime import datetime
+import pytz # مكتبة المناطق الزمنية
 
 # --- إعداد الصفحة ---
-st.set_page_config(page_title="Nawaem Pro System", layout="wide", page_icon="🛍️", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="Nawaem Baghdad System", layout="wide", page_icon="🛍️", initial_sidebar_state="collapsed")
+
+# --- دالة توقيت بغداد ---
+def get_baghdad_time():
+    # تحديد منطقة بغداد الزمنية
+    tz = pytz.timezone('Asia/Baghdad')
+    return datetime.now(tz)
 
 # --- CSS ---
 st.markdown("""
@@ -41,18 +48,12 @@ if 'last_invoice_text' not in st.session_state:
 def init_db():
     conn = sqlite3.connect('boutique_v3.db', check_same_thread=False)
     c = conn.cursor()
-    
-    # المنتجات
     c.execute("""CREATE TABLE IF NOT EXISTS variants (
         id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, color TEXT, size TEXT, cost REAL, price REAL, stock INTEGER
     )""")
-    
-    # العملاء (تم التأكد من وجوده)
     c.execute("""CREATE TABLE IF NOT EXISTS customers (
         id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, phone TEXT, address TEXT, username TEXT
     )""")
-    
-    # المبيعات (تم التأكد من وجود customer_id)
     c.execute("""CREATE TABLE IF NOT EXISTS sales (
         id INTEGER PRIMARY KEY AUTOINCREMENT, customer_id INTEGER, variant_id INTEGER, product_name TEXT, 
         qty INTEGER, total REAL, profit REAL, date TEXT, invoice_id TEXT
@@ -112,13 +113,17 @@ def login_screen():
 
 # --- 5. التطبيق الرئيسي ---
 def main_app():
-    # إضافة تبويب العملاء
+    # عرض التوقيت الحالي في القائمة الجانبية للتأكد
+    with st.sidebar:
+        baghdad_now = get_baghdad_time()
+        st.info(f"توقيت بغداد: {baghdad_now.strftime('%I:%M %p')}")
+
     tabs = st.tabs(["🛒 بيع", "📋 سجل", "👥 عملاء", "📦 مخزن", "🏠 تقرير"])
 
     # === 1. البيع ===
     with tabs[0]:
         if st.session_state.sale_success:
-            st.success("✅ تم حجز الطلب وحفظ بيانات العميل!")
+            st.success("✅ تم حجز الطلب وحفظ البيانات!")
             st.balloons()
             st.markdown("### 📋 انسخ الرسالة:")
             st.code(st.session_state.last_invoice_text, language="text")
@@ -157,7 +162,6 @@ def main_app():
                 st.divider()
                 st.markdown("##### بيانات العميل (مطلوب)")
                 
-                # --- قسم بيانات العميل (تمت إعادته) ---
                 with st.container(border=True):
                     cust_type = st.radio("نوع العميل", ["جديد", "سابق"], horizontal=True)
                     cust_id_val, cust_name_val = None, ""
@@ -176,40 +180,34 @@ def main_app():
                         c_a = st.text_input("العنوان")
                         cust_name_val = c_n
                 
-                # عرض السلة
                 tot = 0
                 invoice_msg = "تم حجز الطلب ✅\n"
-                
                 for i, x in enumerate(st.session_state.cart):
                     tot += x['total']
                     invoice_msg += f"{x['name']}\n{x['color']}\n{x['size']}\n"
                     if len(st.session_state.cart) > 1: invoice_msg += "---\n"
                 
                 invoice_msg += f"{tot:,.0f}\nالتوصيل مجاني\nالف عافية حياتي 🌸🌸🌸🌸"
-                
                 st.markdown(f"**الإجمالي: {tot:,.0f} د.ع**")
 
-                # زر الإتمام
                 if st.button("✅ إتمام البيع ونسخ", type="primary"):
-                    # التحقق من اسم العميل
                     if not cust_name_val:
                         st.error("⚠️ يجب إدخال اسم العميل!")
                         st.stop()
                     
                     cur = conn.cursor()
-                    # حفظ العميل الجديد
                     if cust_type == "جديد":
                         cur.execute("INSERT INTO customers (name, phone, address) VALUES (?,?,?)", (c_n, c_p, c_a))
                         cust_id_val = cur.lastrowid
                     
-                    inv = datetime.now().strftime("%Y%m%d%H%M")
-                    dt = datetime.now().strftime("%Y-%m-%d %H:%M")
+                    # --- استخدام توقيت بغداد ---
+                    baghdad_now = get_baghdad_time()
+                    inv = baghdad_now.strftime("%Y%m%d%H%M")
+                    dt = baghdad_now.strftime("%Y-%m-%d %H:%M") # تخزين التوقيت العراقي
                     
-                    # حفظ المبيعات
                     for x in st.session_state.cart:
                         cur.execute("UPDATE variants SET stock=stock-? WHERE id=?", (x['qty'], x['id']))
                         prf = (x['price']-x['cost'])*x['qty']
-                        # هنا يتم حفظ customer_id
                         cur.execute("INSERT INTO sales (customer_id, variant_id, product_name, qty, total, profit, date, invoice_id) VALUES (?,?,?,?,?,?,?,?)",
                                     (cust_id_val, x['id'], x['name'], x['qty'], x['total'], prf, dt, inv))
                     
@@ -219,10 +217,9 @@ def main_app():
                     st.session_state.last_invoice_text = invoice_msg
                     st.rerun()
 
-    # === 2. السجل (تم الإصلاح لإظهار اسم العميل) ===
+    # === 2. السجل ===
     with tabs[1]:
-        st.caption("آخر 30 عملية بيع")
-        # ربط الجدولين لإظهار الاسم
+        st.caption("آخر 30 عملية بيع (بتوقيت بغداد)")
         df_s = pd.read_sql("""
             SELECT s.*, c.name as customer_name 
             FROM sales s 
@@ -233,21 +230,20 @@ def main_app():
         for i, r in df_s.iterrows():
             with st.container(border=True):
                 c1, c2 = st.columns([4,1])
-                # عرض اسم العميل بوضوح
                 c_name = r['customer_name'] if r['customer_name'] else "غير مسجل"
                 c1.markdown(f"**{r['product_name']}** ({r['qty']})")
-                c1.caption(f"👤 {c_name} | 📅 {r['date']} | 💰 {r['total']:,.0f}")
+                c1.caption(f"👤 {c_name} | 📅 {r['date']}")
                 if c2.button("⚙️", key=f"e{r['id']}"):
                     edit_sale_dialog(r['id'], r['qty'], r['total'], r['variant_id'], r['product_name'])
 
-    # === 3. العملاء (تبويب جديد) ===
+    # === 3. العملاء ===
     with tabs[2]:
         st.header("قائمة المشترين")
         df_cust = pd.read_sql("SELECT * FROM customers ORDER BY id DESC", conn)
         if not df_cust.empty:
             st.dataframe(df_cust, use_container_width=True)
         else:
-            st.info("لا يوجد عملاء مسجلين بعد")
+            st.info("لا يوجد عملاء")
 
     # === 4. المخزون ===
     with tabs[3]:
@@ -286,8 +282,12 @@ def main_app():
 
     # === 5. تقرير ===
     with tabs[4]:
-        today = datetime.now().strftime("%Y-%m-%d")
-        df_tdy = pd.read_sql(f"SELECT SUM(total), SUM(profit) FROM sales WHERE date LIKE '{today}%'", conn).iloc[0]
+        # جلب تاريخ اليوم بتوقيت بغداد
+        today_baghdad = get_baghdad_time().strftime("%Y-%m-%d")
+        
+        df_tdy = pd.read_sql(f"SELECT SUM(total), SUM(profit) FROM sales WHERE date LIKE '{today_baghdad}%'", conn).iloc[0]
+        
+        st.subheader(f"تقرير اليوم: {today_baghdad}")
         st.metric("مبيعات اليوم", f"{df_tdy[0] or 0:,.0f}")
         st.metric("أرباح اليوم", f"{df_tdy[1] or 0:,.0f}")
 
