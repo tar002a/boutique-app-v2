@@ -455,9 +455,9 @@ def main_app():
         today_str = get_baghdad_time().strftime("%Y-%m-%d")
         
         # --- 1. إحصائيات اليوم (تم الإصلاح هنا) ---
-        # استخدام المعاملات %s بدلاً من f-string لتجنب مشكلة tuple index out of range
-        today_query = "SELECT SUM(total), SUM(profit) FROM sales WHERE TO_CHAR(date, 'YYYY-MM-DD') = %s"
-        df_today = run_query(today_query, (today_str,), fetch=True)
+        # استخدام date::text بدلاً من TO_CHAR لتفادي أخطاء النوع
+        today_query = "SELECT SUM(total), SUM(profit) FROM sales WHERE date::text LIKE %s"
+        df_today = run_query(today_query, (f"{today_str}%",), fetch=True)
         
         val_sales = 0
         val_profit = 0
