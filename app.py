@@ -54,7 +54,7 @@ except Exception as e:
     st.error(f"فشل الاتصال بقاعدة البيانات: {e}")
     st.stop()
 
-# دالة لتهيئة الجداول (احتياطية)
+# دالة لتهيئة الجداول
 def init_db():
     try:
         with conn.cursor() as c:
@@ -87,16 +87,16 @@ def edit_sale_dialog(sale_id, current_qty, current_total, variant_id, product_na
                 with conn.cursor() as cur:
                     diff = new_qty - int(current_qty)
                     if diff != 0:
-                        cur.execute("UPDATE public.variants SET stock = stock - %s WHERE id = %s", (diff, variant_id))
-                    cur.execute("UPDATE public.sales SET qty = %s, total = %s WHERE id = %s", (new_qty, new_total, sale_id))
+                        cur.execute("UPDATE public.variants SET stock = stock - %s WHERE id = %s", (int(diff), int(variant_id)))
+                    cur.execute("UPDATE public.sales SET qty = %s, total = %s WHERE id = %s", (int(new_qty), float(new_total), int(sale_id)))
                     conn.commit(); st.rerun()
             except: conn.rollback()
     with c2:
         if st.button("🗑️ حذف"):
             try:
                 with conn.cursor() as cur:
-                    cur.execute("UPDATE public.variants SET stock = stock + %s WHERE id = %s", (int(current_qty), variant_id))
-                    cur.execute("DELETE FROM public.sales WHERE id = %s", (sale_id,))
+                    cur.execute("UPDATE public.variants SET stock = stock + %s WHERE id = %s", (int(current_qty), int(variant_id)))
+                    cur.execute("DELETE FROM public.sales WHERE id = %s", (int(sale_id),))
                     conn.commit(); st.rerun()
             except: conn.rollback()
 
@@ -115,13 +115,13 @@ def edit_stock_dialog(item_id, name, color, size, cost, price, stock):
             try:
                 with conn.cursor() as cur:
                     cur.execute("UPDATE public.variants SET name=%s, color=%s, size=%s, cost=%s, price=%s, stock=%s WHERE id=%s", 
-                                 (n_name, n_col, n_siz, n_cst, n_prc, n_stk, item_id))
+                                 (n_name, n_col, n_siz, float(n_cst), float(n_prc), int(n_stk), int(item_id)))
                     conn.commit(); st.rerun()
             except: conn.rollback()
     if st.button("🗑️ حذف نهائي"):
         try:
             with conn.cursor() as cur:
-                cur.execute("DELETE FROM public.variants WHERE id=%s", (item_id,))
+                cur.execute("DELETE FROM public.variants WHERE id=%s", (int(item_id),))
                 conn.commit(); st.rerun()
         except: conn.rollback()
 
@@ -147,10 +147,9 @@ def main_app():
                 st.session_state.sale_success = False; st.session_state.last_invoice_text = ""; st.rerun()
         else:
             with st.container(border=True):
-                # قراءة المخزون مع public prefix
                 try:
                     df = pd.read_sql("SELECT * FROM public.variants WHERE stock > 0", conn)
-                except: df = pd.DataFrame() # Fallback if error
+                except: df = pd.DataFrame()
 
                 srch = st.text_input("🔍 بحث...", label_visibility="collapsed")
                 if srch and not df.empty:
@@ -164,10 +163,23 @@ def main_app():
                         r = df[df.apply(lambda x: f"{x['name']} | {x['color']} ({x['size']})", axis=1) == sel].iloc[0]
                         st.caption(f"سعر: {r['price']:,.0f} | متوفر: {r['stock']}")
                         c1, c2 = st.columns(2)
+                        # تحويل القيم هنا لضمان أنها أرقام بايثون
                         q = c1.number_input("العدد", 1, int(r['stock']), 1)
                         p = c2.number_input("سعر", value=float(r['price']))
+                        
                         if st.button("أضف للسلة ➕", type="secondary"):
-                            st.session_state.cart.append({"id": int(r['id']), "name": r['name'], "color": r['color'], "size": r['size'], "cost": r['cost'], "price": p, "qty": q, "total": p*q})
+                            # التأكد من تحويل كل شيء إلى int/float عادي
+                            item_dict = {
+                                "id": int(r['id']), 
+                                "name": r['name'], 
+                                "color": r['color'], 
+                                "size": r['size'], 
+                                "cost": float(r['cost']), 
+                                "price": float(p), 
+                                "qty": int(q), 
+                                "total": float(p*q)
+                            }
+                            st.session_state.cart.append(item_dict)
                             st.toast("تمت الإضافة", icon="✅")
 
             if st.session_state.cart:
@@ -184,7 +196,7 @@ def main_app():
                         if not curr_custs.empty:
                             c_sel = st.selectbox("الاسم:", curr_custs.apply(lambda x: f"{x['name']} - {x['phone']}", axis=1).tolist())
                             cust_name_val = c_sel.split(" - ")[0]
-                            cust_id_val = curr_custs[curr_custs['name'] == cust_name_val]['id'].iloc[0]
+                            cust_id_val = int(curr_custs[curr_custs['name'] == cust_name_val]['id'].iloc[0])
                         else: st.warning("لا يوجد")
                     else:
                         c_n = st.text_input("الاسم")
@@ -192,9 +204,9 @@ def main_app():
                         c_a = st.text_input("العنوان")
                         cust_name_val = c_n
                 
-                tot = 0; invoice_msg = "تم حجز الطلب ✅\n"
+                tot = sum(x['total'] for x in st.session_state.cart)
+                invoice_msg = "تم حجز الطلب ✅\n"
                 for x in st.session_state.cart:
-                    tot += x['total']
                     invoice_msg += f"{x['name']}\n{x['color']}\n{x['size']}\n"
                     if len(st.session_state.cart) > 1: invoice_msg += "---\n"
                 invoice_msg += f"{tot:,.0f}\nالتوصيل مجاني\nالف عافية حياتي 🌸🌸🌸🌸"
@@ -214,12 +226,19 @@ def main_app():
                             dt = baghdad_now.strftime("%Y-%m-%d %H:%M")
                             
                             for x in st.session_state.cart:
-                                cur.execute("UPDATE public.variants SET stock=stock-%s WHERE id=%s", (x['qty'], x['id']))
-                                prf = (x['price']-x['cost'])*x['qty']
+                                # 1. تحديث المخزون
+                                cur.execute("UPDATE public.variants SET stock=stock-%s WHERE id=%s", (int(x['qty']), int(x['id'])))
+                                
+                                # 2. حساب الربح وتحويله إلى float صريح
+                                profit_calc = (x['price'] - x['cost']) * x['qty']
+                                final_profit = float(profit_calc)
+                                final_total = float(x['total'])
+                                
+                                # 3. الإدخال
                                 cur.execute("""
                                     INSERT INTO public.sales (customer_id, variant_id, product_name, qty, total, profit, date, invoice_id) 
                                     VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
-                                """, (cust_id_val, x['id'], x['name'], x['qty'], x['total'], prf, dt, inv))
+                                """, (int(cust_id_val), int(x['id']), x['name'], int(x['qty']), final_total, final_profit, dt, inv))
                             
                             conn.commit()
                             st.session_state.cart = []
@@ -265,7 +284,7 @@ def main_app():
                                 for s in sz.replace('،',',').split(','):
                                     if c.strip() and s.strip(): 
                                         cur.execute("INSERT INTO public.variants (name,color,size,stock,price,cost) VALUES (%s,%s,%s,%s,%s,%s)", 
-                                                     (nm, c.strip(), s.strip(), stk, pr, cst))
+                                                     (nm, c.strip(), s.strip(), int(stk), float(pr), float(cst)))
                             conn.commit(); st.rerun()
                     except: conn.rollback()
         st.divider()
@@ -287,7 +306,6 @@ def main_app():
     # === 5. التقارير الذكية ===
     with tabs[4]:
         st.header("📊 ذكاء الأعمال (BI)")
-        
         try:
             today_baghdad = get_baghdad_time().strftime("%Y-%m-%d")
             df_tdy = pd.read_sql(f"SELECT SUM(total), SUM(profit) FROM public.sales WHERE date LIKE '{today_baghdad}%'", conn).iloc[0]
