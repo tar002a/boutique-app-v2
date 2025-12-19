@@ -226,6 +226,9 @@ def init_db():
                 id SERIAL PRIMARY KEY, customer_id INTEGER, variant_id INTEGER, product_name TEXT, 
                 qty INTEGER, total REAL, profit REAL, date TEXT, invoice_id TEXT
             )""")
+            c.execute("""CREATE TABLE IF NOT EXISTS public.expenses (
+                id SERIAL PRIMARY KEY, amount REAL, reason TEXT, date TEXT
+            )""")
             conn.commit()
     except Exception as e:
         conn.rollback()
@@ -292,7 +295,7 @@ def login_screen():
 
 # --- 5. التطبيق الرئيسي ---
 def main_app():
-    tabs = st.tabs(["🛍️ بيع", "📝 سجل", "👥 عملاء", "📦 مخزن", "📊 تقارير"])
+    tabs = st.tabs(["🛍️ بيع", "📝 سجل", "👥 عملاء", "📦 مخزن", "💸 مصاريف", "📊 تقارير"])
 
     # === 1. البيع ===
     with tabs[0]:
@@ -526,8 +529,59 @@ def main_app():
                                 if st.button(f"{r['color']} {r['size']}", key=f"bx{r['id']}"): edit_stock_dialog(r['id'], r['name'], r['color'], r['size'], r['cost'], r['price'], r['stock'])
         except: st.info("المخزون فارغ")
 
-    # === 5. التقارير الذكية ===
+    # === 5. المصاريف ===
     with tabs[4]:
+        st.header("💸 إدارة المصاريف")
+        
+        # نموذج إضافة مصروف
+        with st.form("add_expense_form"):
+            c1, c2 = st.columns([1, 3])
+            amount = c1.number_input("المبلغ (د.ع)", min_value=1.0, step=250.0)
+            reason = c2.text_input("سبب الصرف / التفاصيل")
+            
+            if st.form_submit_button("➕ تسجيل مصروف"):
+                if reason and amount > 0:
+                    try:
+                        with conn.cursor() as cur:
+                            dt = get_baghdad_time().strftime("%Y-%m-%d %H:%M")
+                            cur.execute("INSERT INTO public.expenses (amount, reason, date) VALUES (%s, %s, %s)", (float(amount), reason, dt))
+                            conn.commit()
+                        st.success(f"تم تسجيل مصروف: {amount:,.0f} - {reason}")
+                        st.rerun()
+                    except Exception as e:
+                        conn.rollback()
+                        st.error(f"حدث خطأ: {e}")
+                else:
+                    st.error("يرجى إدخال المبلغ والسبب")
+        
+        st.divider()
+        st.subheader("📋 سجل المصاريف (آخر 50)")
+        
+        try:
+            df_exp = pd.read_sql("SELECT * FROM public.expenses ORDER BY id DESC LIMIT 50", conn)
+            if not df_exp.empty:
+                # تجميل العرض
+                for i, row in df_exp.iterrows():
+                    with st.container(border=True):
+                        c_ex1, c_ex2, c_ex3 = st.columns([1, 3, 1])
+                        c_ex1.markdown(f"**{row['amount']:,.0f} د.ع**")
+                        c_ex2.markdown(f"{row['reason']}")
+                        c_ex3.caption(f"{row['date']}")
+                        
+                        if c_ex3.button("🗑️", key=f"del_exp_{row['id']}"):
+                            try:
+                                with conn.cursor() as cur:
+                                    cur.execute("DELETE FROM public.expenses WHERE id = %s", (int(row['id']),))
+                                    conn.commit()
+                                    st.rerun()
+                            except: conn.rollback()
+            else:
+                st.info("لا توجد مصاريف مسجلة")
+        except:
+            st.info("لا توجد مصاريف بعد")
+
+    # === 6. التقارير الذكية ===
+    with tabs[5]:
         st.header("📊 ذكاء الأعمال (BI)")
         try:
             today_baghdad = get_baghdad_time().strftime("%Y-%m-%d")
