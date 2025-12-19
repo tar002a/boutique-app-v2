@@ -200,6 +200,8 @@ if 'sale_success' not in st.session_state:
     st.session_state.sale_success = False
 if 'last_invoice_text' not in st.session_state:
     st.session_state.last_invoice_text = ""
+if 'last_customer_username' not in st.session_state:
+    st.session_state.last_customer_username = None
 
 # --- 2. اتصال قاعدة البيانات (Supabase) ---
 @st.cache_resource
@@ -304,6 +306,13 @@ def main_app():
             st.balloons()
             st.markdown("### 📋 انسخ الرسالة:")
             st.code(st.session_state.last_invoice_text, language="text")
+            
+            # Instagram Button
+            if st.session_state.last_customer_username:
+                ig_url = f"https://ig.me/m/{st.session_state.last_customer_username}"
+                st.link_button(" إرسال الفاتورة عبر انستغرام", ig_url, type="primary")
+            
+            st.divider()
             if st.button("🔄 طلب جديد", type="primary"):
                 st.session_state.sale_success = False; st.session_state.last_invoice_text = ""; st.rerun()
         else:
@@ -369,19 +378,23 @@ def main_app():
                     cust_id_val, cust_name_val = None, ""
                     if cust_type == "سابق":
                         try:
-                            curr_custs = pd.read_sql("SELECT id, name, phone FROM public.customers", conn)
+                            curr_custs = pd.read_sql("SELECT id, name, phone, username FROM public.customers", conn)
                         except: curr_custs = pd.DataFrame()
                         
                         if not curr_custs.empty:
                             c_sel = st.selectbox("الاسم:", curr_custs.apply(lambda x: f"{x['name']} - {x['phone']}", axis=1).tolist())
                             cust_name_val = c_sel.split(" - ")[0]
-                            cust_id_val = int(curr_custs[curr_custs['name'] == cust_name_val]['id'].iloc[0])
+                            selected_row = curr_custs[curr_custs['name'] == cust_name_val].iloc[0]
+                            cust_id_val = int(selected_row['id'])
+                            # Auto-fill username if exists
+                            cust_username_val = selected_row['username'] if pd.notna(selected_row['username']) else ""
                         else: st.warning("لا يوجد")
                     else:
-                        c_n = st.text_input("الاسم")
+                        c_n = st.text_input("الاسم (حساب الانستغرام)")
                         c_p = st.text_input("الهاتف")
                         c_a = st.text_input("العنوان")
                         cust_name_val = c_n
+                        cust_username_val = c_n
                 
                 tot = sum(x['total'] for x in st.session_state.cart)
                 
@@ -406,8 +419,11 @@ def main_app():
                     try:
                         with conn.cursor() as cur:
                             if cust_type == "جديد":
-                                cur.execute("INSERT INTO public.customers (name, phone, address) VALUES (%s,%s,%s) RETURNING id", (c_n, c_p, c_a))
+                                cur.execute("INSERT INTO public.customers (name, phone, address, username) VALUES (%s,%s,%s,%s) RETURNING id", (c_n, c_p, c_a, c_n))
                                 cust_id_val = cur.fetchone()[0]
+                            elif cust_type == "سابق" and cust_username_val:
+                                # Update username for existing customer if we found it (or if we add an edit feature later, but for now just using what we fetched)
+                                pass 
                             
                             baghdad_now = get_baghdad_time()
                             inv = baghdad_now.strftime("%Y%m%d%H%M")
@@ -425,6 +441,7 @@ def main_app():
                             st.session_state.cart = []
                             st.session_state.sale_success = True
                             st.session_state.last_invoice_text = invoice_msg
+                            st.session_state.last_customer_username = cust_username_val
                             st.rerun()
                     except Exception as e:
                         conn.rollback()
@@ -459,10 +476,76 @@ def main_app():
     # === 3. العملاء ===
     with tabs[2]:
         try:
-            df_cust = pd.read_sql("SELECT * FROM public.customers ORDER BY id DESC", conn)
-            if not df_cust.empty: st.dataframe(df_cust, use_container_width=True)
-            else: st.info("فارغ")
-        except: st.info("فارغ")
+            # جلب بيانات العملاء مع إحصائيات المبيعات
+            df_cust = pd.read_sql("""
+                SELECT 
+                    c.id, c.name, c.phone, c.username, c.address,
+                    COALESCE(SUM(s.total), 0) as total_spend,
+                    MAX(s.date) as last_purchase
+                FROM public.customers c
+                LEFT JOIN public.sales s ON c.id = s.customer_id
+                GROUP BY c.id, c.name, c.phone, c.username, c.address
+                ORDER BY total_spend DESC
+            """, conn)
+            
+            if not df_cust.empty:
+                # البحث
+                search_query = st.text_input("🔍 بحث عن عميل (الاسم أو الهاتف)", "")
+                if search_query:
+                    mask = (
+                        df_cust['name'].str.contains(search_query, case=False) | 
+                        df_cust['phone'].str.contains(search_query, case=False) |
+                        df_cust['username'].str.contains(search_query, case=False)
+                    )
+                    df_cust = df_cust[mask]
+                
+                st.divider()
+                
+                # عرض كارتات العملاء
+                col1, col2 = st.columns(2)
+                for i, r in df_cust.iterrows():
+                    # توزيع الكارتات على عمودين
+                    with (col1 if i % 2 == 0 else col2):
+                        with st.container(border=True):
+                            # تنسيق العنوان والتواصل
+                            username_display = f"@{r['username']}" if r['username'] and r['username'] != r['name'] else ""
+                            phone_display = f"📞 {r['phone']}" if r['phone'] else ""
+                            
+                            st.markdown(f"""
+                            <div style="direction: rtl; text-align: right;">
+                                <div style="font-weight: 800; font-size: 1.2em; color: var(--primary-color); margin-bottom: 4px;">
+                                    {r['name']}
+                                </div>
+                                <div style="font-size: 0.9em; color: var(--subtext-color); margin-bottom: 8px;">
+                                    {username_display} &nbsp; {phone_display}
+                                </div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                            
+                            # إحصائيات سريعة
+                            c_stat1, c_stat2 = st.columns(2)
+                            c_stat1.metric("مجموع الشراء", f"{r['total_spend']:,.0f}")
+                            if r['last_purchase']:
+                                # محاولة تنسيق التاريخ بشكل أفضل
+                                try:
+                                    last_date = r['last_purchase'].split(' ')[0]
+                                except: last_date = r['last_purchase']
+                                c_stat2.metric("آخر ظهور", last_date)
+                            else:
+                                c_stat2.caption("لم يشتري بعد")
+                                
+                            if r['address']:
+                                st.caption(f"📍 {r['address']}")
+                            
+                            # زر واتساب إذا وجد الهاتف
+                            if r['phone']:
+                                wa_url = f"https://wa.me/{r['phone'].replace('+', '').replace(' ', '')}"
+                                st.link_button("💬 واتساب", wa_url)
+                                
+            else:
+                st.info("لا يوجد عملاء مسجلين حالياً")
+        except Exception as e:
+            st.error(f"حدث خطأ في عرض العملاء: {e}")
 
     # === 4. المخزون ===
     with tabs[3]:
