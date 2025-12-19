@@ -890,12 +890,16 @@ def main_app():
                     LIMIT 10
                 """, conn)
                 
-                if not df_top_items.empty: 
+                if not df_top_items.empty:
+                    # Calculate Average Price
+                    df_top_items['avg_price'] = df_top_items['total_sales'] / df_top_items['total_qty']
+                    
                     st.dataframe(
                         df_top_items,
                         column_config={
                             "name": "المنتج",
                             "total_qty": st.column_config.NumberColumn("العدد", help="عدد القطع المباعة"),
+                            "avg_price": st.column_config.NumberColumn("متوسط السعر", format="%d د.ع"),
                             "total_sales": st.column_config.NumberColumn("المبيعات", format="%d د.ع"),
                             "total_profit": st.column_config.ProgressColumn(
                                 "الربح", 
@@ -905,6 +909,7 @@ def main_app():
                                 max_value=int(df_top_items['total_profit'].max()),
                             ),
                         },
+                        column_order=["total_profit", "total_sales", "avg_price", "total_qty", "name"],
                         use_container_width=True, 
                         hide_index=True
                     )
@@ -928,7 +933,7 @@ def main_app():
                     st.dataframe(
                         df_top_cust,
                         column_config={
-                            "name": "العميل",
+                            "name": st.column_config.TextColumn("العميل", width="medium"),
                             "orders_count": st.column_config.NumberColumn("عدد الطلبات"),
                             "total_spend": st.column_config.ProgressColumn(
                                 "مجموع الشراء", 
@@ -941,6 +946,41 @@ def main_app():
                         hide_index=True
                     )
                 else: st.info("لا توجد بيانات كافية")
+
+            st.markdown("---")
+            
+            # --- New Sections: Colors & Sizes ---
+            c_col, c_siz = st.columns(2)
+            
+            with c_col:
+                st.subheader("🎨 أكثر الألوان رغبة")
+                try:
+                    df_colors = pd.read_sql("""
+                        SELECT v.color, SUM(s.qty) as qty 
+                        FROM public.sales s 
+                        JOIN public.variants v ON s.variant_id = v.id 
+                        GROUP BY v.color 
+                        ORDER BY qty DESC LIMIT 5
+                    """, conn)
+                    if not df_colors.empty:
+                        st.bar_chart(df_colors.set_index('color'))
+                    else: st.caption("لا توجد بيانات")
+                except: st.caption("جاري التحديث...")
+
+            with c_siz:
+                st.subheader("📏 أكثر القياسات طلباً")
+                try:
+                    df_sizes = pd.read_sql("""
+                        SELECT v.size, SUM(s.qty) as qty 
+                        FROM public.sales s 
+                        JOIN public.variants v ON s.variant_id = v.id 
+                        GROUP BY v.size 
+                        ORDER BY qty DESC LIMIT 5
+                    """, conn)
+                    if not df_sizes.empty:
+                        st.bar_chart(df_sizes.set_index('size'), color="#FF4B4B") # Different color for distinction
+                    else: st.caption("لا توجد بيانات")
+                except: st.caption("جاري التحديث...")
         except Exception as e:
             st.info("البيانات قيد التجميع...")
 
