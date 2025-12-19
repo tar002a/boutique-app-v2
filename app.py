@@ -15,82 +15,134 @@ def get_baghdad_time():
 # --- CSS ---
 st.markdown("""
 <style>
-    /* Global RTL & Fonts */
+    /* --- Imports --- */
+    @import url('https://fonts.googleapis.com/css2?family=Almarai:wght@300;400;700;800&display=swap');
+
+    /* --- Roots --- */
+    :root {
+        --primary-color: #B76E79; /* Dusty Rose */
+        --secondary-color: #D4A5A5;
+        --bg-color: #F2F2F7; /* iOS Gray 6 */
+        --card-bg: #FFFFFF;
+        --text-color: #1C1C1E;
+        --subtext-color: #8E8E93;
+        --border-radius: 16px;
+    }
+
+    /* --- Global RTL & Fonts --- */
     .stApp {
         direction: rtl;
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        font-family: 'Almarai', sans-serif;
+        background-color: var(--bg-color);
+        color: var(--text-color);
     }
     
-    /* Responsive Columns for Mobile */
-    @media (max-width: 768px) {
-        div[data-testid="column"] {
-            width: 100% !important;
-            flex: 1 1 auto !important;
-            min-width: 100% !important;
-        }
+    h1, h2, h3, h4, h5, h6 {
+        font-family: 'Almarai', sans-serif;
+        font-weight: 800;
+        color: var(--text-color);
     }
 
-    /* Buttons */
+    /* --- Buttons (iOS Style) --- */
     .stButton button {
         width: 100%;
-        height: 50px; /* Taller for touch */
-        border-radius: 12px;
-        font-weight: bold;
+        height: 50px;
+        border-radius: 50px; /* Pill shape */
+        border: none;
+        background-color: var(--primary-color);
+        color: white;
+        font-weight: 700;
         font-size: 16px;
-        transition: all 0.3s ease;
+        box-shadow: 0 4px 10px rgba(183, 110, 121, 0.3);
+        transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+    }
+    .stButton button:hover {
+        background-color: #a05a65;
+        box-shadow: 0 6px 15px rgba(183, 110, 121, 0.4);
+        transform: translateY(-2px);
     }
     .stButton button:active {
-        transform: scale(0.98);
+        transform: scale(0.96);
+    }
+    /* Secondary/Outline Button Tweak (if needed) */
+    button[kind="secondary"] {
+        background-color: transparent !important;
+        border: 2px solid var(--primary-color) !important;
+        color: var(--primary-color) !important;
+        box-shadow: none !important;
     }
 
-    /* Metric Containers (Cards) */
+    /* --- Metric Cards --- */
     div[data-testid="metric-container"] {
-        background-color: #ffffff;
-        padding: 15px;
-        border-radius: 12px;
+        background-color: var(--card-bg);
+        padding: 20px;
+        border-radius: var(--border-radius);
         text-align: center;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-        border: 1px solid #f0f0f0;
-        margin-bottom: 10px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        border: 1px solid rgba(0,0,0,0.02);
+        transition: transform 0.2s;
+    }
+    div[data-testid="metric-container"]:hover {
+        transform: translateY(-2px);
+    }
+    div[data-testid="metric-container"] > label {
+        color: var(--subtext-color);
+        font-size: 0.9rem;
     }
 
-    /* Inputs & Selectboxes */
+    /* --- Inputs & Selectboxes --- */
     div[data-baseweb="input"] {
-        border-radius: 10px;
-        height: 45px;
+        background-color: #FFFFFF;
+        border-radius: 12px;
+        border: 1px solid #E5E5EA; /* iOS Separate */
     }
-    div[data-baseweb="select"] {
-        border-radius: 10px;
+    div[data-baseweb="select"] > div {
+        background-color: #FFFFFF;
+        border-radius: 12px;
+        border: 1px solid #E5E5EA;
     }
-
-    /* Tabs */
+    
+    /* --- Tabs (iOS Segmented Control Look) --- */
     .stTabs [data-baseweb="tab-list"] {
         gap: 8px;
         background-color: transparent;
+        border-radius: 12px;
+        padding: 5px;
     }
     .stTabs [data-baseweb="tab"] {
-        height: 50px;
-        white-space: pre-wrap;
-        background-color: #f8f9fa;
-        border-radius: 8px;
-        padding: 4px 16px;
-        flex: 1; /* Stretch tabs on mobile */
-        border: 1px solid #eee;
+        height: 45px;
+        background-color: rgba(255,255,255,0.5);
+        border-radius: 10px;
+        border: none;
+        color: var(--subtext-color);
+        font-weight: 600;
+        transition: all 0.2s;
+        box-shadow: none;
     }
     .stTabs [aria-selected="true"] {
-        background-color: #e6f3ff !important;
-        color: #0066cc !important;
-        border-color: #0066cc !important;
+        background-color: #FFFFFF !important;
+        color: var(--primary-color) !important;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
     }
 
-    /* Custom Card Style for Items */
+    /* --- Custom Item Card --- */
     .css-card {
-        background-color: white;
-        padding: 15px;
-        border-radius: 12px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-        margin-bottom: 10px;
-        border: 1px solid #eee;
+        background-color: var(--card-bg);
+        padding: 18px;
+        border-radius: 16px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.04);
+        margin-bottom: 12px;
+        border: 1px solid rgba(0,0,0,0.02);
+        transition: all 0.2s ease;
+    }
+    .css-card:hover {
+        box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+        transform: translateY(-1px);
+    }
+    
+    /* Toast override */
+    div[data-baseweb="toast"] {
+        font-family: 'Almarai', sans-serif;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -189,14 +241,14 @@ def edit_stock_dialog(item_id, name, color, size, cost, price, stock):
 
 # --- 4. تسجيل الدخول ---
 def login_screen():
-    st.title("🌸 نواعم بوتيك")
+    st.title("✨ نواعم بوتيك")
     if st.button("دخول للنظام"):
         st.session_state.logged_in = True
         st.rerun()
 
 # --- 5. التطبيق الرئيسي ---
 def main_app():
-    tabs = st.tabs(["🛒 بيع", "📋 سجل", "👥 عملاء", "📦 مخزن", "📊 تقارير ذكية"])
+    tabs = st.tabs(["🛍️ بيع", "📝 سجل", "👥 عملاء", "📦 مخزن", "📊 تقارير"])
 
     # === 1. البيع ===
     with tabs[0]:
@@ -252,11 +304,11 @@ def main_app():
                         st.markdown(f"""
                         <div class="css-card" style="display: flex; justify-content: space-between; align-items: center;">
                             <div style="text-align: right;">
-                                <div style="font-weight: bold; font-size: 1.1em;">{item['name']}</div>
-                                <div style="color: #666; font-size: 0.9em;">{item['color']} | {item['size']}</div>
-                                <div style="color: #444;">{item['qty']} × {item['price']:,.0f}</div>
+                                <div style="font-weight: 800; font-size: 1.1em; color: #1C1C1E;">{item['name']}</div>
+                                <div style="color: #8E8E93; font-size: 0.9em; margin-top: 4px;">{item['color']} | {item['size']}</div>
+                                <div style="color: #B76E79; font-weight: 600; margin-top: 4px;">{item['qty']} × {item['price']:,.0f}</div>
                             </div>
-                            <div style="text-align: left; font-weight: bold; color: #2e7d32;">
+                            <div style="text-align: left; font-weight: 800; color: #B76E79; font-size: 1.2em;">
                                 {item['total']:,.0f}
                             </div>
                         </div>
