@@ -15,20 +15,82 @@ def get_baghdad_time():
 # --- CSS ---
 st.markdown("""
 <style>
-    .stApp {direction: rtl;}
-    div[data-testid="column"] {text-align: right;}
+    /* Global RTL & Fonts */
+    .stApp {
+        direction: rtl;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    
+    /* Responsive Columns for Mobile */
+    @media (max-width: 768px) {
+        div[data-testid="column"] {
+            width: 100% !important;
+            flex: 1 1 auto !important;
+            min-width: 100% !important;
+        }
+    }
+
+    /* Buttons */
     .stButton button {
         width: 100%;
-        height: 45px;
-        border-radius: 10px;
+        height: 50px; /* Taller for touch */
+        border-radius: 12px;
         font-weight: bold;
+        font-size: 16px;
+        transition: all 0.3s ease;
     }
+    .stButton button:active {
+        transform: scale(0.98);
+    }
+
+    /* Metric Containers (Cards) */
     div[data-testid="metric-container"] {
-        background-color: #f0f2f6;
-        padding: 10px;
-        border-radius: 8px;
+        background-color: #ffffff;
+        padding: 15px;
+        border-radius: 12px;
         text-align: center;
-        border: 1px solid #e0e0e0;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        border: 1px solid #f0f0f0;
+        margin-bottom: 10px;
+    }
+
+    /* Inputs & Selectboxes */
+    div[data-baseweb="input"] {
+        border-radius: 10px;
+        height: 45px;
+    }
+    div[data-baseweb="select"] {
+        border-radius: 10px;
+    }
+
+    /* Tabs */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+        background-color: transparent;
+    }
+    .stTabs [data-baseweb="tab"] {
+        height: 50px;
+        white-space: pre-wrap;
+        background-color: #f8f9fa;
+        border-radius: 8px;
+        padding: 4px 16px;
+        flex: 1; /* Stretch tabs on mobile */
+        border: 1px solid #eee;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #e6f3ff !important;
+        color: #0066cc !important;
+        border-color: #0066cc !important;
+    }
+
+    /* Custom Card Style for Items */
+    .css-card {
+        background-color: white;
+        padding: 15px;
+        border-radius: 12px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        margin-bottom: 10px;
+        border: 1px solid #eee;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -182,7 +244,27 @@ def main_app():
 
             if st.session_state.cart:
                 st.divider()
-                st.markdown("##### بيانات العميل")
+                st.markdown("### 🛒 سلة المشتريات")
+                
+                # Cart Items as Cards
+                for i, item in enumerate(st.session_state.cart):
+                    with st.container():
+                        st.markdown(f"""
+                        <div class="css-card" style="display: flex; justify-content: space-between; align-items: center;">
+                            <div style="text-align: right;">
+                                <div style="font-weight: bold; font-size: 1.1em;">{item['name']}</div>
+                                <div style="color: #666; font-size: 0.9em;">{item['color']} | {item['size']}</div>
+                                <div style="color: #444;">{item['qty']} × {item['price']:,.0f}</div>
+                            </div>
+                            <div style="text-align: left; font-weight: bold; color: #2e7d32;">
+                                {item['total']:,.0f}
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        # Option to remove item could be added here if needed in future
+
+                st.divider()
+                st.markdown("##### 👤 بيانات العميل")
                 with st.container(border=True):
                     cust_type = st.radio("نوع العميل", ["جديد", "سابق"], horizontal=True)
                     cust_id_val, cust_name_val = None, ""
@@ -203,12 +285,21 @@ def main_app():
                         cust_name_val = c_n
                 
                 tot = sum(x['total'] for x in st.session_state.cart)
+                
+                # Invoice Text Generation
                 invoice_msg = "تم حجز الطلب ✅\n"
                 for x in st.session_state.cart:
                     invoice_msg += f"{x['name']}\n{x['color']}\n{x['size']}\n"
                     if len(st.session_state.cart) > 1: invoice_msg += "---\n"
                 invoice_msg += f"{tot:,.0f}\nالتوصيل مجاني\nالف عافية حياتي 🌸🌸🌸🌸"
-                st.markdown(f"**الإجمالي: {tot:,.0f} د.ع**")
+                
+                # Total Price Display
+                st.markdown(f"""
+                <div style="background-color: #e8f5e9; padding: 15px; border-radius: 12px; text-align: center; margin-bottom: 20px; border: 1px solid #c8e6c9;">
+                    <div style="font-size: 0.9em; color: #2e7d32;">المجموع الكلي</div>
+                    <div style="font-size: 1.8em; font-weight: bold; color: #1b5e20;">{tot:,.0f} د.ع</div>
+                </div>
+                """, unsafe_allow_html=True)
 
                 if st.button("✅ إتمام البيع ونسخ", type="primary"):
                     if not cust_name_val: st.error("الاسم مطلوب!"); st.stop()
