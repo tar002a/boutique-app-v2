@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
 import psycopg2
 
@@ -332,12 +332,88 @@ def main_app():
         st.header("📊 ذكاء الأعمال (BI)")
         try:
             today_baghdad = get_baghdad_time().strftime("%Y-%m-%d")
-            df_tdy = pd.read_sql(f"SELECT SUM(total), SUM(profit) FROM public.sales WHERE date LIKE '{today_baghdad}%'", conn).iloc[0]
+            # --- حسابات التواريخ ---
+            now = get_baghdad_time()
+            today_str = now.strftime("%Y-%m-%d")
             
-            st.subheader(f"📅 أداء اليوم ({today_baghdad})")
-            col_t1, col_t2 = st.columns(2)
-            col_t1.metric("مبيعات اليوم", f"{df_tdy[0] or 0:,.0f} د.ع")
-            col_t2.metric("أرباح اليوم الصافية", f"{df_tdy[1] or 0:,.0f} د.ع")
+            # 1. اليوم
+            # التحقق من أن التنسيق في قاعدة البيانات هو YYYY-MM-DD
+            # الاستعلام يستخدم LIKE لأن التاريخ مع الوقت
+            
+            # 2. آخر 7 أيام (الأسبوع الحالي)
+            week_start = (now - timedelta(days=6)).strftime("%Y-%m-%d") # 7 أيام تشمل اليوم
+            
+            # 3. الـ 7 أيام السابقة
+            prev_week_end = (now - timedelta(days=7)).strftime("%Y-%m-%d")
+            prev_week_start = (now - timedelta(days=13)).strftime("%Y-%m-%d")
+            
+            # 4. الشهر الحالي
+            month_curr_str = now.strftime("%Y-%m")
+            
+            # 5. الشهر السابق
+            # لتجنب مشاكل أول الشهر، نرجع لليوم الأول ثم نطرح يوم
+            first_day_curr = now.replace(day=1)
+            prev_month_date = first_day_curr - timedelta(days=1)
+            month_prev_str = prev_month_date.strftime("%Y-%m")
+
+            def get_stats(where_clause, params=None):
+                try:
+                    query = f"""
+                        SELECT 
+                            COALESCE(SUM(total), 0), 
+                            COALESCE(SUM(profit), 0), 
+                            COUNT(DISTINCT invoice_id) 
+                        FROM public.sales 
+                        WHERE {where_clause}
+                    """
+                    return pd.read_sql(query, conn, params=params).iloc[0]
+                except:
+                    return [0, 0, 0]
+
+            # جلب البيانات
+            stats_today = get_stats(f"date LIKE '{today_str}%'")
+            stats_week = get_stats(f"date >= '{week_start}'")
+            # للأسبوع السابق: أكبر من أو يساوي البداية وأقل من بداية الأسبوع الحالي (أي التاريخ < week_start لن يشمل week_start)
+            # ولكن بما أن لدينا تواريخ نصية، الدقة قد تكون بالأيام. 
+            # الأفضل: date >= prev_week_start AND date <= prev_week_end (مع الانتباه للتداخل)
+            # سنستخدم date >= prev_week_start AND date < week_start
+            stats_prev_week = get_stats(f"date >= '{prev_week_start}' AND date < '{week_start}'")
+            
+            stats_month = get_stats(f"date LIKE '{month_curr_str}%'")
+            stats_prev_month = get_stats(f"date LIKE '{month_prev_str}%'")
+            
+            # عرض البيانات
+            st.subheader("📅 ملخص المبيعات")
+            
+            # صف اليوم
+            st.markdown(f"##### اليوم ({today_str})")
+            c1, c2, c3 = st.columns(3)
+            c1.metric("مبيعات", f"{stats_today[0]:,.0f}")
+            c2.metric("أرباح", f"{stats_today[1]:,.0f}")
+            c3.metric("فواتير", f"{stats_today[2]:,.0f}")
+            
+            st.divider()
+            
+            # صف الأسبوع
+            st.markdown("##### 📅 الأسبوع (آخر 7 أيام)")
+            c1, c2, c3 = st.columns(3)
+            c1.metric("مبيعات", f"{stats_week[0]:,.0f}", delta=f"{stats_week[0]-stats_prev_week[0]:,.0f} عن السابق")
+            c2.metric("أرباح", f"{stats_week[1]:,.0f}", delta=f"{stats_week[1]-stats_prev_week[1]:,.0f} عن السابق")
+            c3.metric("فواتير", f"{stats_week[2]:,.0f}", delta=f"{stats_week[2]-stats_prev_week[2]:.0f} عن السابق")
+            
+            st.markdown(f"**الأسبوع السابق ({prev_week_start} إلى {prev_week_end}):** مبيعات: {stats_prev_week[0]:,.0f} | أرباح: {stats_prev_week[1]:,.0f} | عدد: {stats_prev_week[2]}")
+            
+            st.divider()
+            
+            # صف الشهر
+            st.markdown("##### 🗓️ الشهر الحالي")
+            c1, c2, c3 = st.columns(3)
+            c1.metric("مبيعات", f"{stats_month[0]:,.0f}", delta=f"{stats_month[0]-stats_prev_month[0]:,.0f} عن السابق")
+            c2.metric("أرباح", f"{stats_month[1]:,.0f}", delta=f"{stats_month[1]-stats_prev_month[1]:,.0f} عن السابق")
+            c3.metric("فواتير", f"{stats_month[2]:,.0f}", delta=f"{stats_month[2]-stats_prev_month[2]:.0f} عن السابق")
+
+            st.markdown(f"**الشهر السابق ({month_prev_str}):** مبيعات: {stats_prev_month[0]:,.0f} | أرباح: {stats_prev_month[1]:,.0f} | عدد: {stats_prev_month[2]}")
+            
             st.markdown("---")
             
             st.subheader("📦 القيمة المالية للمخزون (رأس المال)")
