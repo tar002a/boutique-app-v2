@@ -244,13 +244,25 @@ def main_app():
     with tabs[1]:
         st.caption("آخر العمليات")
         try:
-            df_s = pd.read_sql("SELECT s.*, c.name as customer_name FROM public.sales s LEFT JOIN public.customers c ON s.customer_id = c.id ORDER BY s.id DESC LIMIT 30", conn)
+            df_s = pd.read_sql("""
+                SELECT s.*, c.name as customer_name, v.color, v.size 
+                FROM public.sales s 
+                LEFT JOIN public.customers c ON s.customer_id = c.id 
+                LEFT JOIN public.variants v ON s.variant_id = v.id 
+                ORDER BY s.id DESC LIMIT 30
+            """, conn)
             for i, r in df_s.iterrows():
                 with st.container(border=True):
                     c1, c2 = st.columns([4,1])
                     c_name = r['customer_name'] if r['customer_name'] else "غير مسجل"
+                    
+                    # تحضير نص اللون والقياس
+                    details = ""
+                    if pd.notna(r['color']) and pd.notna(r['size']):
+                        details = f" | 🎨 {r['color']} - {r['size']}"
+                    
                     c1.markdown(f"**{r['product_name']}** ({r['qty']})")
-                    c1.caption(f"👤 {c_name} | 💰 {r['total']:,.0f}")
+                    c1.caption(f"👤 {c_name} | 💰 {r['total']:,.0f}{details}")
                     if c2.button("⚙️", key=f"e{r['id']}"): edit_sale_dialog(r['id'], r['qty'], r['total'], r['variant_id'], r['product_name'])
         except: st.info("لا توجد مبيعات بعد")
 
