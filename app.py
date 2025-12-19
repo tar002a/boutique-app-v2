@@ -22,10 +22,10 @@ st.markdown("""
     :root {
         --primary-color: #B76E79; /* Dusty Rose */
         --secondary-color: #D4A5A5;
-        --bg-color: #F2F2F7; /* iOS Gray 6 */
+        --bg-color: #F2F2F7;
         --card-bg: #FFFFFF;
-        --text-color: #1C1C1E;
-        --subtext-color: #8E8E93;
+        --text-color: #111111; /* Darker for contrast */
+        --subtext-color: #555555; /* Darker gray */
         --border-radius: 16px;
     }
 
@@ -35,6 +35,12 @@ st.markdown("""
         font-family: 'Almarai', sans-serif;
         background-color: var(--bg-color);
         color: var(--text-color);
+    }
+    
+    /* Input Labels High Contrast */
+    .stTextInput label, .stNumberInput label, .stSelectbox label {
+        color: #333333 !important;
+        font-weight: 700 !important;
     }
     
     h1, h2, h3, h4, h5, h6 {
@@ -144,6 +150,22 @@ st.markdown("""
     div[data-baseweb="toast"] {
         font-family: 'Almarai', sans-serif;
     }
+    /* --- Alerts Override --- */
+    .stSuccess {
+        background-color: #d1e7dd;
+        color: #0f5132;
+        border-color: #badbcc;
+    }
+    .stInfo {
+        background-color: #e2e3e5;
+        color: #41464b;
+        border-color: #d3d6d8;
+    }
+    .stWarning {
+        background-color: #fff3cd;
+        color: #664d03;
+        border-color: #ffecb5;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -196,7 +218,7 @@ def edit_sale_dialog(sale_id, current_qty, current_total, variant_id, product_na
     new_total = st.number_input("الإجمالي", value=float(current_total))
     c1, c2 = st.columns(2)
     with c1:
-        if st.button("💾 حفظ", type="primary"):
+        if st.button("💾 حفظ التعديلات", type="primary"):
             try:
                 with conn.cursor() as cur:
                     diff = new_qty - int(current_qty)
@@ -206,7 +228,7 @@ def edit_sale_dialog(sale_id, current_qty, current_total, variant_id, product_na
                     conn.commit(); st.rerun()
             except: conn.rollback()
     with c2:
-        if st.button("🗑️ حذف"):
+        if st.button("🗑️ حذف العملية"):
             try:
                 with conn.cursor() as cur:
                     cur.execute("UPDATE public.variants SET stock = stock + %s WHERE id = %s", (int(current_qty), int(variant_id)))
@@ -225,14 +247,14 @@ def edit_stock_dialog(item_id, name, color, size, cost, price, stock):
         n_cst = c3.number_input("كلفة", value=float(cost))
         n_prc = c4.number_input("بيع", value=float(price))
         n_stk = c5.number_input("عدد", value=int(stock))
-        if st.form_submit_button("💾 حفظ"):
+        if st.form_submit_button("💾 حفظ التعديلات"):
             try:
                 with conn.cursor() as cur:
                     cur.execute("UPDATE public.variants SET name=%s, color=%s, size=%s, cost=%s, price=%s, stock=%s WHERE id=%s", 
                                  (n_name, n_col, n_siz, float(n_cst), float(n_prc), int(n_stk), int(item_id)))
                     conn.commit(); st.rerun()
             except: conn.rollback()
-    if st.button("🗑️ حذف نهائي"):
+    if st.button("🗑️ حذف الصنف نهائياً"):
         try:
             with conn.cursor() as cur:
                 cur.execute("DELETE FROM public.variants WHERE id=%s", (int(item_id),))
@@ -242,7 +264,7 @@ def edit_stock_dialog(item_id, name, color, size, cost, price, stock):
 # --- 4. تسجيل الدخول ---
 def login_screen():
     st.title("✨ نواعم بوتيك")
-    if st.button("دخول للنظام"):
+    if st.button("🔓 دخول للنظام"):
         st.session_state.logged_in = True
         st.rerun()
 
@@ -280,9 +302,9 @@ def main_app():
                         q = c1.number_input("العدد", 1, int(r['stock']), 1)
                         p = c2.number_input("سعر", value=float(r['price']))
                         
-                        if st.button("أضف للسلة ➕", type="secondary"):
+                        if st.button("🛒 أضف للسلة", type="secondary"):
                             item_dict = {
-                                "id": int(r['id']), 
+                                "id": int(r['id']),  
                                 "name": r['name'], 
                                 "color": r['color'], 
                                 "size": r['size'], 
@@ -353,7 +375,7 @@ def main_app():
                 </div>
                 """, unsafe_allow_html=True)
 
-                if st.button("✅ إتمام البيع ونسخ", type="primary"):
+                if st.button("✅ إتمام البيع", type="primary"):
                     if not cust_name_val: st.error("الاسم مطلوب!"); st.stop()
                     
                     try:
@@ -428,7 +450,7 @@ def main_app():
                 pr = st.number_input("سعر البيع", 0.0)
                 cst = st.number_input("سعر التكلفة", 0.0)
                 
-                if st.form_submit_button("حفظ في المخزن"):
+                if st.form_submit_button("➕ حفظ في المخزن"):
                     try:
                         with conn.cursor() as cur:
                             colors = [c.strip() for c in cl.replace('،',',').split(',') if c.strip()]
