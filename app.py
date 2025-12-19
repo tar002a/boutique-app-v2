@@ -375,10 +375,10 @@ def main_app():
                 st.markdown("##### 👤 بيانات العميل")
                 with st.container(border=True):
                     cust_type = st.radio("نوع العميل", ["جديد", "سابق"], horizontal=True)
-                    cust_id_val, cust_name_val = None, ""
+                    cust_id_val, cust_name_val, cust_username_val, cust_phone_val, cust_address_val = None, "", "", "", ""
                     if cust_type == "سابق":
                         try:
-                            curr_custs = pd.read_sql("SELECT id, name, phone, username FROM public.customers", conn)
+                            curr_custs = pd.read_sql("SELECT id, name, phone, username, address FROM public.customers", conn)
                         except: curr_custs = pd.DataFrame()
                         
                         if not curr_custs.empty:
@@ -388,6 +388,8 @@ def main_app():
                             cust_id_val = int(selected_row['id'])
                             # Auto-fill username if exists
                             cust_username_val = selected_row['username'] if pd.notna(selected_row['username']) else ""
+                            cust_phone_val = selected_row['phone'] if pd.notna(selected_row['phone']) else ""
+                            cust_address_val = selected_row['address'] if pd.notna(selected_row['address']) else ""
                         else: st.warning("لا يوجد")
                     else:
                         c_n = st.text_input("الاسم (حساب الانستغرام)")
@@ -395,15 +397,30 @@ def main_app():
                         c_a = st.text_input("العنوان")
                         cust_name_val = c_n
                         cust_username_val = c_n
+                        cust_phone_val = c_p
+                        cust_address_val = c_a
                 
                 tot = sum(x['total'] for x in st.session_state.cart)
                 
                 # Invoice Text Generation
-                invoice_msg = "تم حجز الطلب ✅\n"
-                for x in st.session_state.cart:
-                    invoice_msg += f"{x['name']}\n{x['color']}\n{x['size']}\n"
-                    if len(st.session_state.cart) > 1: invoice_msg += "---\n"
-                invoice_msg += f"{tot:,.0f}\nالتوصيل مجاني\nالف عافية حياتي 🌸🌸🌸🌸"
+                # Invoice Text Generation
+                invoice_msg = "🌸 تم تثبيت طلبج بنجاح حبيبتي\n📄 تفاصيل الطلب:\n"
+                for i, x in enumerate(st.session_state.cart):
+                    invoice_msg += f"القطعة: {x['name']}\n"
+                    invoice_msg += f"اللون: {x['color']} | القياس: {x['size']}\n"
+                    invoice_msg += f"العدد: {x['qty']}\n"
+                    invoice_msg += f"السعر: {x['price']:,.0f}\n"
+                    if len(st.session_state.cart) > 1 and i < len(st.session_state.cart) - 1:
+                        invoice_msg += "---\n"
+                
+                invoice_msg += f"التوصيل: مجاني 🎁\n"
+                invoice_msg += f"المجموع الكلي: {tot:,.0f} د.ع\n"
+                invoice_msg += f"📍 معلومات التوصيل:\n"
+                invoice_msg += f"العنوان: {cust_address_val}\n"
+                invoice_msg += f"الرقم: {cust_phone_val}\n"
+                invoice_msg += f"✨ ملاحظة مهمة: من يوصل المندوب، ضروري تفتحين الطلب وتقيسين القطعة وتتأكدين منها قبل الدفع. هذا حقج حتى تضمنين قياسج وموديلج 100%.\n"
+                invoice_msg += f"🚚 مدة التوصيل: خلال 2-4 أيام إن شاء الله. المندوب راح يتصل بيج قبل ما يوصل.\n\n"
+                invoice_msg += f"تتهنين بيها مقدماً، وشكراً لثقتج بـ نواعم بوتيك 🤍"
                 
                 # Total Price Display
                 st.markdown(f"""
