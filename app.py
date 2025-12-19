@@ -16,7 +16,7 @@ def get_baghdad_time():
 st.markdown("""
 <style>
     /* --- Imports --- */
-    @import url('https://fonts.googleapis.com/css2?family=Almarai:wght@300;400;700;800&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@200;300;400;500;600;700;800;900&display=swap');
 
     /* --- Roots (Dark Mode) --- */
     :root {
@@ -34,9 +34,11 @@ st.markdown("""
     /* --- Global RTL & Fonts --- */
     .stApp {
         direction: rtl;
-        font-family: 'Almarai', sans-serif;
+        font-family: 'Cairo', sans-serif;
         background-color: var(--bg-color);
         color: var(--text-color);
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
     }
     
     /* Strict RTL Enforcement */
@@ -52,9 +54,10 @@ st.markdown("""
     }
     
     h1, h2, h3, h4, h5, h6 {
-        font-family: 'Almarai', sans-serif;
-        font-weight: 800;
+        font-family: 'Cairo', sans-serif;
+        font-weight: 700 !important;
         color: var(--text-color);
+        margin-bottom: 10px;
     }
 
     /* --- Buttons (iOS Style) --- */
@@ -167,7 +170,7 @@ st.markdown("""
     
     /* Toast override */
     div[data-baseweb="toast"] {
-        font-family: 'Almarai', sans-serif;
+        font-family: 'Cairo', sans-serif;
     }
     /* --- Alerts Override --- */
     .stSuccess {
