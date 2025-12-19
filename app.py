@@ -153,12 +153,25 @@ def main_app():
             st.code(st.session_state.last_invoice_text, language="text")
             
             # زر إضافي لفتح المحادثة
+            # زر إضافي لفتح المحادثة
             if st.session_state.last_customer_name:
-                if st.button("💬 فتح المحادثة (انستغرام)"):
-                     try:
-                        webbrowser.open(f"https://ig.me/m/{st.session_state.last_customer_name}")
-                        if CLIPBOARD_AVAILABLE: pyperclip.copy(st.session_state.last_invoice_text)
-                     except: pass
+                nm = st.session_state.last_customer_name
+                url = f"https://ig.me/m/{nm}"
+                
+                c_btn, c_lnk = st.columns([1, 1])
+                with c_btn:
+                    if st.button("💬 فتح المحادثة ونسخ"):
+                         try:
+                            if CLIPBOARD_AVAILABLE: 
+                                pyperclip.copy(st.session_state.last_invoice_text)
+                                st.toast("تم النسخ ✅")
+                            
+                            webbrowser.open(url)
+                            st.toast(f"جاري فتح: {nm}")
+                         except Exception as e:
+                             st.error(f"خطأ: {e}")
+                with c_lnk:
+                     st.link_button("🔗 فتح الرابط فقط", url)
 
             if st.button("🔄 طلب جديد", type="primary"):
                 st.session_state.sale_success = False; st.session_state.last_invoice_text = ""; st.session_state.last_customer_name = ""; st.rerun()
