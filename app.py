@@ -3,6 +3,12 @@ import pandas as pd
 from datetime import datetime, timedelta
 import pytz
 import psycopg2
+import webbrowser
+try:
+    import pyperclip
+    CLIPBOARD_AVAILABLE = True
+except ImportError:
+    CLIPBOARD_AVAILABLE = False
 
 # --- إعداد الصفحة ---
 st.set_page_config(page_title="Nawaem System", layout="wide", page_icon="📊", initial_sidebar_state="collapsed")
@@ -235,6 +241,21 @@ def main_app():
                             st.session_state.cart = []
                             st.session_state.sale_success = True
                             st.session_state.last_invoice_text = invoice_msg
+                            
+                            # --- نسخ تلقائي وفتح انستغرام ---
+                            if CLIPBOARD_AVAILABLE:
+                                try:
+                                    pyperclip.copy(invoice_msg)
+                                    st.toast("تم نسخ الفاتورة 📋", icon="✅")
+                                except Exception as ex_clip:
+                                    print(f"Clipboard error: {ex_clip}")
+                            else:
+                                st.warning("مكتبة النسخ غير مثبتة (pyperclip)")
+                            
+                            try:
+                                webbrowser.open("https://www.instagram.com/direct/inbox/")
+                            except: pass
+
                             st.rerun()
                     except Exception as e:
                         conn.rollback()
