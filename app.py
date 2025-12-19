@@ -623,49 +623,60 @@ def main_app():
                 except:
                     return [0, 0, 0]
 
-            # جلب البيانات
+            def get_exp(where_clause):
+                try:
+                    q = f"SELECT COALESCE(SUM(amount), 0) FROM public.expenses WHERE {where_clause}"
+                    return pd.read_sql(q, conn).iloc[0,0]
+                except: return 0
+
+            # جلب البيانات (مبيعات)
             stats_today = get_stats(f"date LIKE '{today_str}%'")
             stats_week = get_stats(f"date >= '{week_start}'")
-            # للأسبوع السابق: أكبر من أو يساوي البداية وأقل من بداية الأسبوع الحالي (أي التاريخ < week_start لن يشمل week_start)
-            # ولكن بما أن لدينا تواريخ نصية، الدقة قد تكون بالأيام. 
-            # الأفضل: date >= prev_week_start AND date <= prev_week_end (مع الانتباه للتداخل)
-            # سنستخدم date >= prev_week_start AND date < week_start
             stats_prev_week = get_stats(f"date >= '{prev_week_start}' AND date < '{week_start}'")
-            
             stats_month = get_stats(f"date LIKE '{month_curr_str}%'")
             stats_prev_month = get_stats(f"date LIKE '{month_prev_str}%'")
-            
+
+            # جلب البيانات (مصاريف)
+            exp_today = get_exp(f"date LIKE '{today_str}%'")
+            exp_week = get_exp(f"date >= '{week_start}'")
+            exp_prev_week = get_exp(f"date >= '{prev_week_start}' AND date < '{week_start}'")
+            exp_month = get_exp(f"date LIKE '{month_curr_str}%'")
+            exp_prev_month = get_exp(f"date LIKE '{month_prev_str}%'")
+
             # عرض البيانات
             st.subheader("📅 ملخص المبيعات")
             
             # صف اليوم
             st.markdown(f"##### اليوم ({today_str})")
-            c1, c2, c3 = st.columns(3)
-            c1.metric("مبيعات", f"{stats_today[0]:,.0f}")
-            c2.metric("أرباح", f"{stats_today[1]:,.0f}")
-            c3.metric("فواتير", f"{stats_today[2]:,.0f}")
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("مبيعات", f"{stats_today[0]:,.0f}", f"{stats_today[2]} فاتورة")
+            c2.metric("أرباح (خام)", f"{stats_today[1]:,.0f}")
+            c3.metric("مصاريف", f"{exp_today:,.0f}", delta_color="inverse")
+            c4.metric("صافي الربح", f"{stats_today[1]-exp_today:,.0f}")
             
             st.divider()
             
             # صف الأسبوع
             st.markdown("##### 📅 الأسبوع (آخر 7 أيام)")
-            c1, c2, c3 = st.columns(3)
-            c1.metric("مبيعات", f"{stats_week[0]:,.0f}", delta=f"{stats_week[0]-stats_prev_week[0]:,.0f} عن السابق")
-            c2.metric("أرباح", f"{stats_week[1]:,.0f}", delta=f"{stats_week[1]-stats_prev_week[1]:,.0f} عن السابق")
-            c3.metric("فواتير", f"{stats_week[2]:,.0f}", delta=f"{stats_week[2]-stats_prev_week[2]:.0f} عن السابق")
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("مبيعات", f"{stats_week[0]:,.0f}", delta=f"{stats_week[0]-stats_prev_week[0]:,.0f}")
+            c2.metric("أرباح (خام)", f"{stats_week[1]:,.0f}", delta=f"{stats_week[1]-stats_prev_week[1]:,.0f}")
+            c3.metric("مصاريف", f"{exp_week:,.0f}", delta=f"{exp_week-exp_prev_week:,.0f}", delta_color="inverse")
+            c4.metric("صافي الربح", f"{(stats_week[1]-exp_week):,.0f}", delta=f"{(stats_week[1]-exp_week)-(stats_prev_week[1]-exp_prev_week):,.0f}")
             
-            st.markdown(f"**الأسبوع السابق ({prev_week_start} إلى {prev_week_end}):** مبيعات: {stats_prev_week[0]:,.0f} | أرباح: {stats_prev_week[1]:,.0f} | عدد: {stats_prev_week[2]}")
+            st.caption(f"**الأسبوع السابق:** مبيعات: {stats_prev_week[0]:,.0f} | أرباح: {stats_prev_week[1]:,.0f} | صافي: {stats_prev_week[1]-exp_prev_week:,.0f}")
             
             st.divider()
             
             # صف الشهر
             st.markdown("##### 🗓️ الشهر الحالي")
-            c1, c2, c3 = st.columns(3)
-            c1.metric("مبيعات", f"{stats_month[0]:,.0f}", delta=f"{stats_month[0]-stats_prev_month[0]:,.0f} عن السابق")
-            c2.metric("أرباح", f"{stats_month[1]:,.0f}", delta=f"{stats_month[1]-stats_prev_month[1]:,.0f} عن السابق")
-            c3.metric("فواتير", f"{stats_month[2]:,.0f}", delta=f"{stats_month[2]-stats_prev_month[2]:.0f} عن السابق")
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("مبيعات", f"{stats_month[0]:,.0f}", delta=f"{stats_month[0]-stats_prev_month[0]:,.0f}")
+            c2.metric("أرباح (خام)", f"{stats_month[1]:,.0f}", delta=f"{stats_month[1]-stats_prev_month[1]:,.0f}")
+            c3.metric("مصاريف", f"{exp_month:,.0f}", delta=f"{exp_month-exp_prev_month:,.0f}", delta_color="inverse")
+            c4.metric("صافي الربح", f"{(stats_month[1]-exp_month):,.0f}", delta=f"{(stats_month[1]-exp_month)-(stats_prev_month[1]-exp_prev_month):,.0f}")
 
-            st.markdown(f"**الشهر السابق ({month_prev_str}):** مبيعات: {stats_prev_month[0]:,.0f} | أرباح: {stats_prev_month[1]:,.0f} | عدد: {stats_prev_month[2]}")
+            st.caption(f"**الشهر السابق ({month_prev_str}):** مبيعات: {stats_prev_month[0]:,.0f} | صافي: {stats_prev_month[1]-exp_prev_month:,.0f}")
             
             st.markdown("---")
             
