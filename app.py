@@ -15,56 +15,42 @@ def get_baghdad_time():
 # --- CSS ---
 st.markdown("""
 <style>
-    /* --- Imports --- */
     @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@200;300;400;500;600;700;800;900&display=swap');
-
-    /* --- Roots (Dark Mode) --- */
     :root {
-        --primary-color: #B76E79; /* Dusty Rose */
+        --primary-color: #B76E79; 
         --secondary-color: #D4A5A5;
-        --bg-color: #1C1C1E; /* iOS High Contrast Dark */
-        --card-bg: #2C2C2E; /* Elevation 1 */
-        --text-color: #FFFFFF; /* High Contrast White */
-        --subtext-color: #AEAEB2; /* iOS Gray */
+        --bg-color: #1C1C1E; 
+        --card-bg: #2C2C2E; 
+        --text-color: #FFFFFF; 
+        --subtext-color: #AEAEB2; 
         --border-radius: 16px;
         --input-bg: #2C2C2E;
         --border-color: #3A3A3C;
     }
-
-    /* --- Global RTL & Fonts --- */
     .stApp {
         direction: rtl;
         font-family: 'Cairo', sans-serif;
         background-color: var(--bg-color);
         color: var(--text-color);
-        -webkit-font-smoothing: antialiased;
-        -moz-osx-font-smoothing: grayscale;
     }
-    
-    /* Strict RTL Enforcement */
     .stMarkdown, p, h1, h2, h3, h4, h5, h6, span, div, label, .stButton, .stTextInput, .stNumberInput, .stSelectbox {
         text-align: right !important;
         direction: rtl !important;
     }
-    
-    /* Input Labels */
     .stTextInput label, .stNumberInput label, .stSelectbox label {
         color: var(--subtext-color) !important;
         font-weight: 600 !important;
     }
-    
     h1, h2, h3, h4, h5, h6 {
         font-family: 'Cairo', sans-serif;
         font-weight: 700 !important;
         color: var(--text-color);
         margin-bottom: 10px;
     }
-
-    /* --- Buttons (iOS Style) --- */
     .stButton button {
         width: 100%;
         height: 50px;
-        border-radius: 50px; /* Pill shape */
+        border-radius: 50px; 
         border: none;
         background-color: var(--primary-color);
         color: white;
@@ -78,18 +64,6 @@ st.markdown("""
         box-shadow: 0 6px 15px rgba(183, 110, 121, 0.4);
         transform: translateY(-2px);
     }
-    .stButton button:active {
-        transform: scale(0.96);
-    }
-    /* Secondary/Outline Button Tweak (if needed) */
-    button[kind="secondary"] {
-        background-color: transparent !important;
-        border: 2px solid var(--primary-color) !important;
-        color: var(--primary-color) !important;
-        box-shadow: none !important;
-    }
-
-    /* --- Metric Cards --- */
     div[data-testid="metric-container"] {
         background-color: var(--card-bg);
         padding: 20px;
@@ -97,43 +71,20 @@ st.markdown("""
         text-align: center;
         box-shadow: 0 4px 12px rgba(0,0,0,0.2);
         border: 1px solid var(--border-color);
-        transition: transform 0.2s;
     }
-    div[data-testid="metric-container"]:hover {
-        transform: translateY(-2px);
-    }
-    div[data-testid="metric-container"] > label {
-        color: var(--subtext-color);
-        font-size: 0.9rem;
-    }
-
-    /* --- Inputs & Selectboxes --- */
-    /* --- Inputs & Selectboxes --- */
-    div[data-baseweb="input"] {
+    div[data-baseweb="input"], div[data-baseweb="select"] > div {
         background-color: var(--input-bg);
         border-radius: 12px;
         border: 1px solid var(--border-color);
         color: white;
     }
-    div[data-baseweb="input"] input {
-        color: white !important; /* Ensure text is white */
+    div[data-baseweb="input"] input, div[data-baseweb="select"] span {
+        color: white !important; 
         background-color: transparent !important;
     }
-    div[data-baseweb="select"] > div {
-        background-color: var(--input-bg);
-        border-radius: 12px;
-        border: 1px solid var(--border-color);
-        color: white;
-    }
-    div[data-baseweb="select"] span {
-        color: white !important;
-    }
-    
-    /* --- Tabs (iOS Segmented Control Look) --- */
     .stTabs [data-baseweb="tab-list"] {
         gap: 8px;
         background-color: transparent;
-        border-radius: 12px;
         padding: 5px;
     }
     .stTabs [data-baseweb="tab"] {
@@ -143,17 +94,11 @@ st.markdown("""
         border: none;
         color: var(--subtext-color);
         font-weight: 600;
-        transition: all 0.2s;
-        box-shadow: none;
     }
     .stTabs [aria-selected="true"] {
         background-color: #3A3A3C !important;
         color: var(--primary-color) !important;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
     }
-
-    /* --- Custom Item Card --- */
-    /* --- Custom Item Card --- */
     .css-card {
         background-color: var(--card-bg);
         padding: 18px;
@@ -161,32 +106,6 @@ st.markdown("""
         box-shadow: 0 4px 12px rgba(0,0,0,0.2);
         margin-bottom: 12px;
         border: 1px solid var(--border-color);
-        transition: all 0.2s ease;
-    }
-    .css-card:hover {
-        box-shadow: 0 8px 24px rgba(0,0,0,0.06);
-        transform: translateY(-1px);
-    }
-    
-    /* Toast override */
-    div[data-baseweb="toast"] {
-        font-family: 'Cairo', sans-serif;
-    }
-    /* --- Alerts Override --- */
-    .stSuccess {
-        background-color: #d1e7dd;
-        color: #0f5132;
-        border-color: #badbcc;
-    }
-    .stInfo {
-        background-color: #e2e3e5;
-        color: #41464b;
-        border-color: #d3d6d8;
-    }
-    .stWarning {
-        background-color: #fff3cd;
-        color: #664d03;
-        border-color: #ffecb5;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -214,7 +133,7 @@ except Exception as e:
     st.error(f"فشل الاتصال بقاعدة البيانات: {e}")
     st.stop()
 
-# دالة لتهيئة الجداول
+# دالة لتهيئة الجداول (تم تعديل نوع التاريخ إلى TIMESTAMP)
 def init_db():
     try:
         with conn.cursor() as c:
@@ -224,12 +143,14 @@ def init_db():
             c.execute("""CREATE TABLE IF NOT EXISTS public.customers (
                 id SERIAL PRIMARY KEY, name TEXT, phone TEXT, address TEXT, username TEXT
             )""")
+            # تم تعديل date إلى TIMESTAMP
             c.execute("""CREATE TABLE IF NOT EXISTS public.sales (
                 id SERIAL PRIMARY KEY, customer_id INTEGER, variant_id INTEGER, product_name TEXT, 
-                qty INTEGER, total REAL, profit REAL, date TEXT, invoice_id TEXT
+                qty INTEGER, total REAL, profit REAL, date TIMESTAMP, invoice_id TEXT
             )""")
+            # تم تعديل date إلى TIMESTAMP
             c.execute("""CREATE TABLE IF NOT EXISTS public.expenses (
-                id SERIAL PRIMARY KEY, amount REAL, reason TEXT, date TEXT
+                id SERIAL PRIMARY KEY, amount REAL, reason TEXT, date TIMESTAMP
             )""")
             conn.commit()
     except Exception as e:
@@ -354,7 +275,6 @@ def main_app():
                 st.divider()
                 st.markdown("### 🛒 سلة المشتريات")
                 
-                # Cart Items as Cards
                 for i, item in enumerate(st.session_state.cart):
                     with st.container():
                         st.markdown(f"""
@@ -369,7 +289,6 @@ def main_app():
                             </div>
                         </div>
                         """, unsafe_allow_html=True)
-                        # Option to remove item could be added here if needed in future
 
                 st.divider()
                 st.markdown("##### 👤 بيانات العميل")
@@ -386,7 +305,6 @@ def main_app():
                             cust_name_val = c_sel.split(" - ")[0]
                             selected_row = curr_custs[curr_custs['name'] == cust_name_val].iloc[0]
                             cust_id_val = int(selected_row['id'])
-                            # Auto-fill username if exists
                             cust_username_val = selected_row['username'] if pd.notna(selected_row['username']) else ""
                             cust_phone_val = selected_row['phone'] if pd.notna(selected_row['phone']) else ""
                             cust_address_val = selected_row['address'] if pd.notna(selected_row['address']) else ""
@@ -402,8 +320,6 @@ def main_app():
                 
                 tot = sum(x['total'] for x in st.session_state.cart)
                 
-                # Invoice Text Generation
-                # Invoice Text Generation
                 invoice_msg = "🌸 تم تثبيت طلبج بنجاح حبيبتي\n📄 تفاصيل الطلب:\n"
                 for i, x in enumerate(st.session_state.cart):
                     invoice_msg += f"القطعة: {x['name']}\n"
@@ -422,7 +338,6 @@ def main_app():
                 invoice_msg += f"🚚 مدة التوصيل: خلال 2-4 أيام إن شاء الله. المندوب راح يتصل بيج قبل ما يوصل.\n\n"
                 invoice_msg += f"تتهنين بيها مقدماً، وشكراً لثقتج بـ نواعم بوتيك 🤍"
                 
-                # Total Price Display
                 st.markdown(f"""
                 <div style="background-color: var(--input-bg); padding: 15px; border-radius: 12px; text-align: center; margin-bottom: 20px; border: 1px solid var(--border-color);">
                     <div style="font-size: 0.9em; color: var(--subtext-color);">المجموع الكلي</div>
@@ -438,13 +353,12 @@ def main_app():
                             if cust_type == "جديد":
                                 cur.execute("INSERT INTO public.customers (name, phone, address, username) VALUES (%s,%s,%s,%s) RETURNING id", (c_n, c_p, c_a, c_n))
                                 cust_id_val = cur.fetchone()[0]
-                            elif cust_type == "سابق" and cust_username_val:
-                                # Update username for existing customer if we found it (or if we add an edit feature later, but for now just using what we fetched)
-                                pass 
                             
+                            # التقاط وقت بغداد ككائن datetime
                             baghdad_now = get_baghdad_time()
-                            inv = baghdad_now.strftime("%Y%m%d%H%M")
-                            dt = baghdad_now.strftime("%Y-%m-%d %H:%M")
+                            # حذف التوقيت لتجنب مشاكل الـ offset في بعض مكتبات الـ DB إذا لم تكن configured
+                            # لكن psycopg2 يتعامل معها جيداً، سنرسل الـ datetime object
+                            inv_id = baghdad_now.strftime("%Y%m%d%H%M")
                             
                             for x in st.session_state.cart:
                                 cur.execute("UPDATE public.variants SET stock=stock-%s WHERE id=%s", (int(x['qty']), int(x['id'])))
@@ -452,7 +366,7 @@ def main_app():
                                 cur.execute("""
                                     INSERT INTO public.sales (customer_id, variant_id, product_name, qty, total, profit, date, invoice_id) 
                                     VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
-                                """, (int(cust_id_val), int(x['id']), x['name'], int(x['qty']), float(x['total']), float(profit_calc), dt, inv))
+                                """, (int(cust_id_val), int(x['id']), x['name'], int(x['qty']), float(x['total']), float(profit_calc), baghdad_now, inv_id))
                             
                             conn.commit()
                             st.session_state.cart = []
@@ -480,20 +394,22 @@ def main_app():
                     c1, c2 = st.columns([4,1])
                     c_name = r['customer_name'] if r['customer_name'] else "غير مسجل"
                     
-                    # تحضير نص اللون والقياس
                     details = ""
                     if pd.notna(r['color']) and pd.notna(r['size']):
                         details = f" | 🎨 {r['color']} - {r['size']}"
                     
+                    # معالجة عرض التاريخ (Timestamp)
+                    date_display = r['date'].strftime('%Y-%m-%d %I:%M %p') if pd.notnull(r['date']) else ""
+                    
                     c1.markdown(f"**{r['product_name']}** ({r['qty']})")
                     c1.caption(f"👤 {c_name} | 💰 {r['total']:,.0f}{details}")
+                    c1.caption(f"📅 {date_display}")
                     if c2.button("⚙️", key=f"e{r['id']}"): edit_sale_dialog(r['id'], r['qty'], r['total'], r['variant_id'], r['product_name'])
         except: st.info("لا توجد مبيعات بعد")
 
     # === 3. العملاء ===
     with tabs[2]:
         try:
-            # جلب بيانات العملاء مع إحصائيات المبيعات
             df_cust = pd.read_sql("""
                 SELECT 
                     c.id, c.name, c.phone, c.username, c.address,
@@ -506,7 +422,6 @@ def main_app():
             """, conn)
             
             if not df_cust.empty:
-                # البحث
                 search_query = st.text_input("🔍 بحث عن عميل (الاسم أو الهاتف)", "")
                 if search_query:
                     mask = (
@@ -518,13 +433,10 @@ def main_app():
                 
                 st.divider()
                 
-                # عرض كارتات العملاء
                 col1, col2 = st.columns(2)
                 for i, r in df_cust.iterrows():
-                    # توزيع الكارتات على عمودين
                     with (col1 if i % 2 == 0 else col2):
                         with st.container(border=True):
-                            # تنسيق العنوان والتواصل
                             username_display = f"@{r['username']}" if r['username'] and r['username'] != r['name'] else ""
                             phone_display = f"📞 {r['phone']}" if r['phone'] else ""
                             
@@ -539,14 +451,11 @@ def main_app():
                             </div>
                             """, unsafe_allow_html=True)
                             
-                            # إحصائيات سريعة
                             c_stat1, c_stat2 = st.columns(2)
                             c_stat1.metric("مجموع الشراء", f"{r['total_spend']:,.0f}")
-                            if r['last_purchase']:
-                                # محاولة تنسيق التاريخ بشكل أفضل
-                                try:
-                                    last_date = r['last_purchase'].split(' ')[0]
-                                except: last_date = r['last_purchase']
+                            if pd.notnull(r['last_purchase']):
+                                # تحويل Timestamp إلى نص
+                                last_date = r['last_purchase'].strftime('%Y-%m-%d')
                                 c_stat2.metric("آخر ظهور", last_date)
                             else:
                                 c_stat2.caption("لم يشتري بعد")
@@ -554,7 +463,6 @@ def main_app():
                             if r['address']:
                                 st.caption(f"📍 {r['address']}")
                             
-                            # زر واتساب إذا وجد الهاتف
                             if r['phone']:
                                 wa_url = f"https://wa.me/{r['phone'].replace('+', '').replace(' ', '')}"
                                 st.link_button("💬 واتساب", wa_url)
@@ -566,9 +474,7 @@ def main_app():
 
     # === 4. المخزون ===
     with tabs[3]:
-        # --- 1. Metrics & Header ---
         try:
-            # Metrics Calculation
             df_inv = pd.read_sql("SELECT * FROM public.variants ORDER BY name", conn)
             
             total_items_count = df_inv['stock'].sum() if not df_inv.empty else 0
@@ -577,7 +483,6 @@ def main_app():
             total_potential_profit = total_value_sell - total_value_cost
             low_stock_count = df_inv[df_inv['stock'] < 5].shape[0] if not df_inv.empty else 0
 
-            # Display Metrics
             m1, m2, m3, m4 = st.columns(4)
             m1.metric("📦 عدد القطع", f"{total_items_count}")
             m2.metric("💰 قيمة المخزون (بيع)", f"{total_value_sell:,.0f}")
@@ -590,7 +495,6 @@ def main_app():
 
         st.divider()
 
-        # --- 2. Controls (Search & Add) ---
         c_ctrl1, c_ctrl2 = st.columns([3, 1])
         with c_ctrl1:
             search_query = st.text_input("🔍 بحث عن صنف (الاسم، اللون، القياس)...", label_visibility="collapsed")
@@ -609,14 +513,13 @@ def main_app():
                         try:
                             with conn.cursor() as cur:
                                 cur.execute("INSERT INTO public.variants (name,color,size,stock,price,cost) VALUES (%s,%s,%s,%s,%s,%s)", 
-                                            (nm, cl, sz, int(stk), float(pr), float(cst)))
+                                             (nm, cl, sz, int(stk), float(pr), float(cst)))
                                 conn.commit()
                                 st.toast("تم الحفظ بنجاح", icon="✅")
                                 st.rerun()
                         except Exception as e:
                             st.error(f"خطأ: {e}")
 
-        # --- 3. Filter Logic ---
         if not df_inv.empty:
             filtered_df = df_inv.copy()
             if search_query:
@@ -627,7 +530,6 @@ def main_app():
                 )
                 filtered_df = filtered_df[mask]
             
-            # --- 4. View Mode Selection ---
             view_mode = st.radio("طريقة العرض", ["كروت 🆔", "جدول 📄"], horizontal=True, label_visibility="collapsed")
 
             if view_mode == "جدول 📄":
@@ -645,18 +547,13 @@ def main_app():
                     hide_index=True
                 )
             else:
-                # Card View
-                # Group by Name only
                 unique_names = filtered_df['name'].unique()
                 for p_name in unique_names:
                     p_group = filtered_df[filtered_df['name'] == p_name]
-                    
-                    # Calculate Product-Level Stats
                     total_stock_for_product = p_group['stock'].sum()
                     total_value_for_product = (p_group['stock'] * p_group['price']).sum()
                     
                     with st.container(border=True):
-                        # Header Row: Name + Stats
                         c_h1, c_h2, c_h3 = st.columns([2, 1, 1])
                         c_h1.markdown(f"#### 👗 {p_name}")
                         c_h2.markdown(f"**📦 العدد الكلي:** {total_stock_for_product}")
@@ -664,41 +561,33 @@ def main_app():
                         
                         st.markdown("---")
                         
-                        # Body: Group by Color
                         unique_colors = p_group['color'].unique()
                         for color in unique_colors:
                             c_group = p_group[p_group['color'] == color]
-                            
-                            # Row for each color
                             r1, r2 = st.columns([1, 4])
                             with r1:
                                 st.markdown(f"##### 🎨 {color}")
                             
                             with r2:
-                                # Items as Chips
-                                # We'll use a flex container for the chips
                                 chips_html = '<div style="display: flex; gap: 8px; flex-wrap: wrap;">'
                                 for _, row in c_group.iterrows():
-                                    # Determine chip color based on stock
-                                    bg_color = "#2C2C2E" # Default dark
+                                    bg_color = "#2C2C2E" 
                                     border_color = "#3A3A3C"
-                                    text_color = "#FFFFFF"
                                     
                                     if row['stock'] == 0:
-                                        border_color = "#FF453A" # Red
+                                        border_color = "#FF453A"
                                         bg_color = "rgba(255, 69, 58, 0.1)"
                                     elif row['stock'] < 5:
-                                        border_color = "#FF9F0A" # Orange
+                                        border_color = "#FF9F0A"
                                         bg_color = "rgba(255, 159, 10, 0.1)"
                                     else:
-                                        border_color = "#30D158" # Green
+                                        border_color = "#30D158"
                                         bg_color = "rgba(48, 209, 88, 0.1)"
 
                                     chips_html += f"""<div style="border: 1px solid {border_color}; background-color: {bg_color}; padding: 5px 12px; border-radius: 20px; font-size: 0.9em; display: flex; align-items: center; gap: 5px;"><span style="font-weight: bold;">{row['size']}</span><span style="font-size: 0.8em; opacity: 0.8;">| {row['stock']} قطعة</span></div>"""
                                 chips_html += "</div>"
                                 st.markdown(chips_html, unsafe_allow_html=True)
                             
-                            # Edit Buttons (Collapsible for cleaner look)
                             with st.expander(f"تعديل {p_name} - {color}"):
                                 cols = st.columns(4)
                                 for idx, (_, row) in enumerate(c_group.iterrows()):
@@ -713,7 +602,6 @@ def main_app():
     with tabs[4]:
         st.header("💸 إدارة المصاريف")
         
-        # نموذج إضافة مصروف
         with st.form("add_expense_form"):
             c1, c2 = st.columns([1, 3])
             amount = c1.number_input("المبلغ (د.ع)", min_value=1.0, step=250.0)
@@ -723,8 +611,9 @@ def main_app():
                 if reason and amount > 0:
                     try:
                         with conn.cursor() as cur:
-                            dt = get_baghdad_time().strftime("%Y-%m-%d %H:%M")
-                            cur.execute("INSERT INTO public.expenses (amount, reason, date) VALUES (%s, %s, %s)", (float(amount), reason, dt))
+                            # إرسال datetime object بدلاً من النص
+                            dt_now = get_baghdad_time()
+                            cur.execute("INSERT INTO public.expenses (amount, reason, date) VALUES (%s, %s, %s)", (float(amount), reason, dt_now))
                             conn.commit()
                         st.success(f"تم تسجيل مصروف: {amount:,.0f} - {reason}")
                         st.rerun()
@@ -740,13 +629,14 @@ def main_app():
         try:
             df_exp = pd.read_sql("SELECT * FROM public.expenses ORDER BY id DESC LIMIT 50", conn)
             if not df_exp.empty:
-                # تجميل العرض
                 for i, row in df_exp.iterrows():
                     with st.container(border=True):
                         c_ex1, c_ex2, c_ex3 = st.columns([1, 3, 1])
                         c_ex1.markdown(f"**{row['amount']:,.0f} د.ع**")
                         c_ex2.markdown(f"{row['reason']}")
-                        c_ex3.caption(f"{row['date']}")
+                        # تنسيق التاريخ
+                        exp_date = row['date'].strftime('%Y-%m-%d') if pd.notnull(row['date']) else ""
+                        c_ex3.caption(f"{exp_date}")
                         
                         if c_ex3.button("🗑️", key=f"del_exp_{row['id']}"):
                             try:
@@ -764,17 +654,12 @@ def main_app():
     with tabs[5]:
         st.header("📊 ذكاء الأعمال (BI)")
         try:
-            today_baghdad = get_baghdad_time().strftime("%Y-%m-%d")
             # --- حسابات التواريخ ---
             now = get_baghdad_time()
             today_str = now.strftime("%Y-%m-%d")
             
-            # 1. اليوم
-            # التحقق من أن التنسيق في قاعدة البيانات هو YYYY-MM-DD
-            # الاستعلام يستخدم LIKE لأن التاريخ مع الوقت
-            
             # 2. آخر 7 أيام (الأسبوع الحالي)
-            week_start = (now - timedelta(days=6)).strftime("%Y-%m-%d") # 7 أيام تشمل اليوم
+            week_start = (now - timedelta(days=6)).strftime("%Y-%m-%d")
             
             # 3. الـ 7 أيام السابقة
             prev_week_end = (now - timedelta(days=7)).strftime("%Y-%m-%d")
@@ -784,11 +669,11 @@ def main_app():
             month_curr_str = now.strftime("%Y-%m")
             
             # 5. الشهر السابق
-            # لتجنب مشاكل أول الشهر، نرجع لليوم الأول ثم نطرح يوم
             first_day_curr = now.replace(day=1)
             prev_month_date = first_day_curr - timedelta(days=1)
             month_prev_str = prev_month_date.strftime("%Y-%m")
 
+            # تم تحديث الاستعلامات للتعامل مع TIMESTAMP
             def get_stats(where_clause, params=None):
                 try:
                     query = f"""
@@ -809,19 +694,24 @@ def main_app():
                     return pd.read_sql(q, conn).iloc[0,0]
                 except: return 0
 
-            # جلب البيانات (مبيعات)
-            stats_today = get_stats(f"date LIKE '{today_str}%'")
+            # جلب البيانات (مبيعات) - باستخدام دوال التاريخ في SQL
+            # اليوم: نحول الـ timestamp إلى date للمقارنة
+            stats_today = get_stats(f"date::date = '{today_str}'")
+            
+            # الأسبوع: مقارنة مباشرة
             stats_week = get_stats(f"date >= '{week_start}'")
             stats_prev_week = get_stats(f"date >= '{prev_week_start}' AND date < '{week_start}'")
-            stats_month = get_stats(f"date LIKE '{month_curr_str}%'")
-            stats_prev_month = get_stats(f"date LIKE '{month_prev_str}%'")
+            
+            # الشهر: استخدام to_char للتنسيق YYYY-MM
+            stats_month = get_stats(f"to_char(date, 'YYYY-MM') = '{month_curr_str}'")
+            stats_prev_month = get_stats(f"to_char(date, 'YYYY-MM') = '{month_prev_str}'")
 
             # جلب البيانات (مصاريف)
-            exp_today = get_exp(f"date LIKE '{today_str}%'")
+            exp_today = get_exp(f"date::date = '{today_str}'")
             exp_week = get_exp(f"date >= '{week_start}'")
             exp_prev_week = get_exp(f"date >= '{prev_week_start}' AND date < '{week_start}'")
-            exp_month = get_exp(f"date LIKE '{month_curr_str}%'")
-            exp_prev_month = get_exp(f"date LIKE '{month_prev_str}%'")
+            exp_month = get_exp(f"to_char(date, 'YYYY-MM') = '{month_curr_str}'")
+            exp_prev_month = get_exp(f"to_char(date, 'YYYY-MM') = '{month_prev_str}'")
 
             # عرض البيانات
             st.subheader("📅 ملخص المبيعات")
@@ -891,7 +781,6 @@ def main_app():
                 """, conn)
                 
                 if not df_top_items.empty:
-                    # Calculate Average Price
                     df_top_items['avg_price'] = df_top_items['total_sales'] / df_top_items['total_qty']
                     
                     st.dataframe(
@@ -957,7 +846,6 @@ def main_app():
 
             st.markdown("---")
             
-            # --- New Sections: Colors & Sizes ---
             c_col, c_siz = st.columns(2)
             
             with c_col:
@@ -986,7 +874,7 @@ def main_app():
                         ORDER BY qty DESC LIMIT 5
                     """, conn)
                     if not df_sizes.empty:
-                        st.bar_chart(df_sizes.set_index('size'), color="#FF4B4B") # Different color for distinction
+                        st.bar_chart(df_sizes.set_index('size'), color="#FF4B4B")
                     else: st.caption("لا توجد بيانات")
                 except: st.caption("جاري التحديث...")
         except Exception as e:
