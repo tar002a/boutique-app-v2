@@ -224,7 +224,9 @@ def edit_sale_dialog(sale_id, current_qty, current_total, variant_id, product_na
                     if diff != 0:
                         cur.execute("UPDATE public.variants SET stock = stock - %s WHERE id = %s", (int(diff), int(variant_id)))
                     cur.execute("UPDATE public.sales SET qty = %s, total = %s WHERE id = %s", (int(new_qty), float(new_total), int(sale_id)))
-                    conn.commit(); st.rerun()
+                    conn.commit()
+                    st.toast("✅ تم تحديث الفاتورة بنجاح")
+                    st.cache_data.clear(); st.rerun()
             except: conn.rollback()
     with c2:
         if st.button("🗑️ حذف العملية"):
@@ -232,7 +234,9 @@ def edit_sale_dialog(sale_id, current_qty, current_total, variant_id, product_na
                 with conn.cursor() as cur:
                     cur.execute("UPDATE public.variants SET stock = stock + %s WHERE id = %s", (int(current_qty), int(variant_id)))
                     cur.execute("DELETE FROM public.sales WHERE id = %s", (int(sale_id),))
-                    conn.commit(); st.rerun()
+                    conn.commit()
+                    st.toast("🗑️ تم حذف الفاتورة")
+                    st.cache_data.clear(); st.rerun()
             except: conn.rollback()
 
 @st.dialog("تعديل المخزون")
@@ -251,13 +255,17 @@ def edit_stock_dialog(item_id, name, color, size, cost, price, stock):
                 with conn.cursor() as cur:
                     cur.execute("UPDATE public.variants SET name=%s, color=%s, size=%s, cost=%s, price=%s, stock=%s WHERE id=%s", 
                                  (n_name, n_col, n_siz, float(n_cst), float(n_prc), int(n_stk), int(item_id)))
-                    conn.commit(); st.rerun()
+                    conn.commit()
+                    st.toast("✅ تم تحديث المخزون")
+                    st.cache_data.clear(); st.rerun()
             except: conn.rollback()
     if st.button("🗑️ حذف الصنف نهائياً"):
         try:
             with conn.cursor() as cur:
                 cur.execute("DELETE FROM public.variants WHERE id=%s", (int(item_id),))
-                conn.commit(); st.rerun()
+                conn.commit()
+                st.toast("🗑️ تم حذف الصنف")
+                st.cache_data.clear(); st.rerun()
         except: conn.rollback()
 
 # --- 4. تسجيل الدخول ---
@@ -420,11 +428,12 @@ def main_app():
                                 """, (int(cust_id_val), int(x['id']), x['name'], int(x['qty']), float(x['total']), float(profit_calc), baghdad_now, inv_id))
                             
                             conn.commit()
+                            st.toast(f"💰 تمت عملية البيع بقيمة {tot:,.0f} د.ع", icon="✅")
                             st.session_state.cart = []
                             st.session_state.sale_success = True
                             st.session_state.last_invoice_text = invoice_msg
                             st.session_state.last_customer_username = cust_username_val
-                            st.rerun()
+                            st.cache_data.clear(); st.rerun()
                     except Exception as e:
                         conn.rollback()
                         st.error(f"حدث خطأ: {e}")
@@ -625,7 +634,7 @@ def main_app():
                                 st.toast(f"تمت إضافة/تحديث {len(combinations)} صنف", icon="🛍️")
                                 st.balloons()
                                 st.session_state['last_added_msg'] = msg 
-                                st.rerun()
+                                st.cache_data.clear(); st.rerun()
                                 
                             except Exception as e:
                                 st.error(f"خطأ: {e}")
@@ -725,8 +734,9 @@ def main_app():
                             dt_now = get_baghdad_time()
                             cur.execute("INSERT INTO public.expenses (amount, reason, date) VALUES (%s, %s, %s)", (float(amount), reason, dt_now))
                             conn.commit()
+                        st.toast(f"✅ تم تسجيل مصروف: {amount:,.0f} د.ع")
                         st.success(f"تم تسجيل مصروف: {amount:,.0f} - {reason}")
-                        st.rerun()
+                        st.cache_data.clear(); st.rerun()
                     except Exception as e:
                         conn.rollback()
                         st.error(f"حدث خطأ: {e}")
@@ -753,7 +763,8 @@ def main_app():
                                 with conn.cursor() as cur:
                                     cur.execute("DELETE FROM public.expenses WHERE id = %s", (int(row['id']),))
                                     conn.commit()
-                                    st.rerun()
+                                    st.toast("🗑️ تم حذف المصروف")
+                                    st.cache_data.clear(); st.rerun()
                             except: conn.rollback()
             else:
                 st.info("لا توجد مصاريف مسجلة")
