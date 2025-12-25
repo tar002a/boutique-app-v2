@@ -3,6 +3,9 @@ import pandas as pd
 from datetime import datetime, timedelta
 import pytz
 import psycopg2
+import re
+import itertools
+from difflib import SequenceMatcher
 
 # --- إعداد الصفحة ---
 st.set_page_config(page_title="Nawaem System", layout="wide", page_icon="📊", initial_sidebar_state="collapsed")
@@ -157,6 +160,54 @@ def init_db():
         conn.rollback()
 
 init_db()
+
+# --- 3.5. دوال مساعدة (Bulk & Fuzzy) ---
+def parse_multi_input(text):
+    """
+    Parses a string containing multiple values separated by commas, hyphens, or spaces.
+    Returns a list of clean strings.
+    """
+    if not text:
+        return []
+    
+    # Text normalization
+    text = text.strip()
+    
+    # Check for specific separators
+    if ',' in text or '،' in text:
+        # Split by comma (both English and Arabic)
+        parts = re.split(r'[,،]', text)
+    elif '-' in text:
+        # Split by hyphen
+        parts = text.split('-')
+    else:
+        # Split by whitespace
+        parts = text.split()
+        
+    # Clean up results
+    return [p.strip() for p in parts if p.strip()]
+
+def fuzzy_match(new_val, existing_vals, threshold=0.85):
+    """
+    Checks if new_val is similar to any item in existing_vals.
+    Returns the existing item if match found, otherwise returns new_val.
+    """
+    if not new_val:
+        return new_val
+        
+    best_match = None
+    best_ratio = 0.0
+    
+    for val in existing_vals:
+        if not val: continue
+        ratio = SequenceMatcher(None, new_val.lower(), val.lower()).ratio()
+        if ratio > best_ratio:
+            best_ratio = ratio
+            best_match = val
+            
+    if best_ratio >= threshold:
+        return best_match
+    return new_val
 
 # --- 3. النوافذ المنبثقة ---
 @st.dialog("تعديل عملية بيع")
@@ -474,6 +525,9 @@ def main_app():
 
     # === 4. المخزون ===
     with tabs[3]:
+        if 'last_added_msg' in st.session_state and st.session_state['last_added_msg']:
+            st.success(st.session_state['last_added_msg'])
+            st.session_state['last_added_msg'] = None
         try:
             df_inv = pd.read_sql("SELECT * FROM public.variants ORDER BY name", conn)
             
@@ -501,24 +555,80 @@ def main_app():
         with c_ctrl2:
             with st.popover("➕ إضافة صنف جديد", use_container_width=True):
                 with st.form("add_new_stock"):
-                    st.markdown("##### إضافة بضاعة جديدة")
+                    st.markdown("##### إضافة بضاعة (Bulk & Smart)")
                     nm = st.text_input("اسم المنتج")
-                    cl = st.text_input("اللون")
-                    sz = st.text_input("القياس")
-                    c_f1, c_f2 = st.columns(2)
-                    stk = c_f1.number_input("العدد", 1)
+                    
+                    c_h1, c_h2 = st.columns(2)
+                    col_hint = "مثال: أحمر، أسود، أزرق"
+                    cl = c_h1.text_input("اللون/الألوان", help=col_hint, placeholder="أحمر، أسود")
+                    siz_hint = "مثال: S, M, L, XL (أو 38-40-42)"
+                    sz = c_h2.text_input("القياس/القياسات", help=siz_hint, placeholder="S, M, L")
+                    
+                    c_f1, c_f2, c_f3 = st.columns(3)
+                    stk = c_f1.number_input("العدد (للقطعة)", 1)
                     pr = c_f2.number_input("سعر البيع", 0.0)
-                    cst = st.number_input("سعر التكلفة", 0.0)
-                    if st.form_submit_button("حفظ", type="primary"):
-                        try:
-                            with conn.cursor() as cur:
-                                cur.execute("INSERT INTO public.variants (name,color,size,stock,price,cost) VALUES (%s,%s,%s,%s,%s,%s)", 
-                                             (nm, cl, sz, int(stk), float(pr), float(cst)))
-                                conn.commit()
-                                st.toast("تم الحفظ بنجاح", icon="✅")
+                    cst = c_f3.number_input("سعر التكلفة", 0.0)
+                    
+                    if st.form_submit_button("حفظ وإضافة", type="primary"):
+                        if not nm or not cl or not sz:
+                            st.error("يرجى ملء الاسم واللون والقياس")
+                        else:
+                            try:
+                                # Prepare reference for Fuzzy Match
+                                existing_names = df_inv['name'].unique().tolist() if not df_inv.empty else []
+                                existing_colors = df_inv['color'].unique().tolist() if not df_inv.empty else []
+                                
+                                # 1. Name Fuzzy Match
+                                final_name = fuzzy_match(nm, existing_names)
+                                
+                                # 2. Parse Lists
+                                colors_list = parse_multi_input(cl)
+                                sizes_list = parse_multi_input(sz)
+                                
+                                # Cartesian Product
+                                combinations = list(itertools.product(colors_list, sizes_list))
+                                
+                                count_added = 0
+                                count_updated = 0
+                                
+                                with conn.cursor() as cur:
+                                    for c_val, s_val in combinations:
+                                        # 3. Color Fuzzy Match
+                                        final_color = fuzzy_match(c_val, existing_colors)
+                                        
+                                        # Check existence
+                                        cur.execute(
+                                            "SELECT id, stock FROM public.variants WHERE name=%s AND color=%s AND size=%s",
+                                            (final_name, final_color, s_val)
+                                        )
+                                        res = cur.fetchone()
+                                        
+                                        if res:
+                                            # Update Existing
+                                            cur.execute(
+                                                "UPDATE public.variants SET stock = stock + %s, price = %s, cost = %s WHERE id = %s",
+                                                (int(stk), float(pr), float(cst), res[0])
+                                            )
+                                            count_updated += 1
+                                        else:
+                                            # Insert New
+                                            cur.execute(
+                                                "INSERT INTO public.variants (name,color,size,stock,price,cost) VALUES (%s,%s,%s,%s,%s,%s)", 
+                                                (final_name, final_color, s_val, int(stk), float(pr), float(cst))
+                                            )
+                                            count_added += 1
+                                            
+                                    conn.commit()
+                                    
+                                msg = f"✅ تمت العملية!\n📝 الاسم المعتمد: {final_name}\n➕ جديد: {count_added} | 🔄 تحديث: {count_updated}\n🎨 الألوان: {', '.join(colors_list)}"
+                                st.success(msg)
+                                st.toast(f"تمت إضافة/تحديث {len(combinations)} صنف", icon="🛍️")
+                                st.balloons()
+                                st.session_state['last_added_msg'] = msg 
                                 st.rerun()
-                        except Exception as e:
-                            st.error(f"خطأ: {e}")
+                                
+                            except Exception as e:
+                                st.error(f"خطأ: {e}")
 
         if not df_inv.empty:
             filtered_df = df_inv.copy()
