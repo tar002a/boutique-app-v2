@@ -281,6 +281,88 @@ def edit_stock_dialog(item_id, name, color, size, cost, price, stock):
                 st.cache_data.clear(); st.rerun()
         except: conn.rollback()
 
+# --- 3.5. دالة مساعدة للألوان ---
+def get_color_emoji(color_name):
+    color_map = {
+        "أحمر": "🔴", "red": "🔴",
+        "أسود": "⚫", "black": "⚫",
+        "أبيض": "⚪", "white": "⚪",
+        "أزرق": "🔵", "blue": "🔵",
+        "أخضر": "🟢", "green": "🟢",
+        "أصفر": "🟡", "yellow": "🟡",
+        "بني": "🟤", "brown": "🟤",
+        "برتقالي": "🟠", "orange": "🟠",
+        "بنفسجي": "🟣", "purple": "🟣",
+        "وردي": "🌸", "pink": "🌸",
+        "رصاصي": "👽", "gray": "👽",
+        "ذهبي": "✨", "gold": "✨",
+        "فضي": "🥈", "silver": "🥈",
+        "بيج": "🍂", "beige": "🍂"
+    }
+    # Simple normalization/lookup
+    if not color_name: return "🎨"
+    for k, v in color_map.items():
+        if k in color_name:
+            return v
+    return "🎨"
+
+@st.dialog("تعديل المخزون - بضاعة كاملة")
+def edit_product_stock_dialog(product_name):
+    st.markdown(f"### تعديل: {product_name}")
+    try:
+        # Load ALL variants (even stock=0) to allow restocking
+        df = pd.read_sql(
+            "SELECT id, color, size, stock, price, cost FROM public.variants WHERE name = %s ORDER BY color, size",
+            conn, params=(product_name,)
+        )
+        
+        if not df.empty:
+            edited_df = st.data_editor(
+                df,
+                column_config={
+                    "id": None, # Hide ID
+                    "color": "اللون",
+                    "size": "القياس",
+                    "stock": st.column_config.NumberColumn("العدد", min_value=0, step=1, required=True),
+                    "price": st.column_config.NumberColumn("سعر البيع", min_value=0.0, step=250.0, format="%d"),
+                    "cost": st.column_config.NumberColumn("التكلفة", min_value=0.0, step=250.0, format="%d"),
+                },
+                use_container_width=True,
+                key=f"edit_editor_{hash(product_name)}", 
+                num_rows="fixed" 
+            )
+            
+            if st.button("💾 حفظ التغييرات", type="primary", key=f"save_btn_{hash(product_name)}"):
+                try:
+                    with conn.cursor() as cur:
+                        # Iterate through edited rows
+                        for idx, row in edited_df.iterrows():
+                            # Optimization: Only update if changed? 
+                            # interacting with dirty flags in DB is better but full update is safer for now.
+                            cur.execute("""
+                                UPDATE public.variants 
+                                SET stock=%s, price=%s, cost=%s, color=%s, size=%s
+                                WHERE id=%s
+                            """, (
+                                int(row['stock']), 
+                                float(row['price']), 
+                                float(row['cost']),
+                                row['color'],
+                                row['size'],
+                                int(row['id'])
+                            ))
+                        conn.commit()
+                        st.toast("✅ تم التحديث بنجاح")
+                        st.session_state['data_changed'] = True
+                        st.rerun()
+                except Exception as e:
+                    st.error(f"خطأ في الحفظ: {e}")
+        else:
+            st.warning("لم يتم العثور على بيانات!")
+            
+    except Exception as e:
+        st.error(f"خطأ: {e}")
+
 # --- 4. تسجيل الدخول ---
 def login_screen():
     st.title("✨ نواعم بوتيك")
@@ -743,80 +825,42 @@ def main_app():
                                 st.error(f"خطأ: {e}")
 
         if not df_inv.empty:
-            filtered_df = df_inv.copy()
+            # --- Strict Filter: Only show items with stock > 0 ---
+            df_display = df_inv[df_inv['stock'] > 0].copy()
+            
             if search_query:
                 mask = (
-                    filtered_df['name'].str.contains(search_query, case=False) | 
-                    filtered_df['color'].str.contains(search_query, case=False) |
-                    filtered_df['size'].str.contains(search_query, case=False)
+                    df_display['name'].str.contains(search_query, case=False) | 
+                    df_display['color'].str.contains(search_query, case=False) |
+                    df_display['size'].str.contains(search_query, case=False)
                 )
-                filtered_df = filtered_df[mask]
+                df_display = df_display[mask]
             
-            view_mode = st.radio("طريقة العرض", ["كروت 🆔", "جدول 📄"], horizontal=True, label_visibility="collapsed")
-
-            if view_mode == "جدول 📄":
-                st.dataframe(
-                    filtered_df[['name', 'color', 'size', 'stock', 'price', 'cost']],
-                    column_config={
-                        "name": "الاسم",
-                        "color": "اللون",
-                        "size": "القياس",
-                        "stock": st.column_config.NumberColumn("العدد", help="الكمية المتوفرة"),
-                        "price": st.column_config.NumberColumn("سعر البيع", format="%d د.ع"),
-                        "cost": st.column_config.NumberColumn("التكلفة", format="%d د.ع"),
-                    },
-                    use_container_width=True,
-                    hide_index=True
-                )
-            else:
-                unique_names = filtered_df['name'].unique()
-                for p_name in unique_names:
-                    p_group = filtered_df[filtered_df['name'] == p_name]
-                    total_stock_for_product = p_group['stock'].sum()
-                    total_value_for_product = (p_group['stock'] * p_group['price']).sum()
+            if not df_display.empty:
+                unique_products = df_display['name'].unique()
+                for p_name in unique_products:
+                    p_group = df_display[df_display['name'] == p_name]
+                    total_qty = p_group['stock'].sum()
                     
-                    with st.container(border=True):
-                        c_h1, c_h2, c_h3 = st.columns([2, 1, 1])
-                        c_h1.markdown(f"#### 👗 {p_name}")
-                        c_h2.markdown(f"**📦 العدد الكلي:** {total_stock_for_product}")
-                        c_h3.markdown(f"**💰 القيمة الكلية:** {total_value_for_product:,.0f}")
-                        
-                        st.markdown("---")
-                        
+                    # Expander for Product
+                    with st.expander(f"{p_name} (العدد: {total_qty})"):
+                        # Group by Color
                         unique_colors = p_group['color'].unique()
                         for color in unique_colors:
                             c_group = p_group[p_group['color'] == color]
-                            r1, r2 = st.columns([1, 4])
-                            with r1:
-                                st.markdown(f"##### 🎨 {color}")
+                            color_qty = c_group['stock'].sum()
+                            # Sort sizes naturally if possible, or just sort text
+                            sizes_list = sorted(c_group['size'].astype(str).tolist()) 
+                            sizes_str = ", ".join(sizes_list)
+                            emoji = get_color_emoji(color)
                             
-                            with r2:
-                                chips_html = '<div style="display: flex; gap: 8px; flex-wrap: wrap;">'
-                                for _, row in c_group.iterrows():
-                                    bg_color = "#2C2C2E" 
-                                    border_color = "#3A3A3C"
-                                    
-                                    if row['stock'] == 0:
-                                        border_color = "#FF453A"
-                                        bg_color = "rgba(255, 69, 58, 0.1)"
-                                    elif row['stock'] < 5:
-                                        border_color = "#FF9F0A"
-                                        bg_color = "rgba(255, 159, 10, 0.1)"
-                                    else:
-                                        border_color = "#30D158"
-                                        bg_color = "rgba(48, 209, 88, 0.1)"
-
-                                    chips_html += f"""<div style="border: 1px solid {border_color}; background-color: {bg_color}; padding: 5px 12px; border-radius: 20px; font-size: 0.9em; display: flex; align-items: center; gap: 5px;"><span style="font-weight: bold;">{row['size']}</span><span style="font-size: 0.8em; opacity: 0.8;">| {row['stock']} قطعة</span></div>"""
-                                chips_html += "</div>"
-                                st.markdown(chips_html, unsafe_allow_html=True)
-                            
-                            with st.expander(f"تعديل {p_name} - {color}"):
-                                cols = st.columns(4)
-                                for idx, (_, row) in enumerate(c_group.iterrows()):
-                                    with cols[idx % 4]:
-                                        if st.button(f"✏️ {row['size']}", key=f"ed_{row['id']}"):
-                                            edit_stock_dialog(row['id'], row['name'], row['color'], row['size'], row['cost'], row['price'], row['stock'])
-
+                            st.markdown(f"**{emoji} {color}:** &nbsp; {sizes_str} &nbsp; <span style='color:var(--subtext-color);'>(العدد: {color_qty})</span>", unsafe_allow_html=True)
+                        
+                        st.divider()
+                        if st.button("✏️ تعديل الكميات", key=f"edit_stk_{hash(p_name)}"):
+                            edit_product_stock_dialog(p_name)
+            else:
+                st.info("لا توجد منتجات مطابقة للبحث (المتوفرة فقط).")
         else:
             st.info("المخزون فارغ، أضيفي منتجات جديدة.")
 
