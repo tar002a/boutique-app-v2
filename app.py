@@ -826,6 +826,7 @@ def main_app():
 
         if not df_inv.empty:
             # --- Strict Filter: Only show items with stock > 0 ---
+            # This ensures items with 0 stock (or negative) are completely hidden from the display.
             df_display = df_inv[df_inv['stock'] > 0].copy()
             
             if search_query:
