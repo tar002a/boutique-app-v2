@@ -35,9 +35,14 @@ st.markdown("""
         --border-color: rgba(255, 255, 255, 0.08);
     }
 
-    * { 
+    /* تطبيق الخط العربي فقط على المحتوى - بدون التأثير على أيقونات Streamlit */
+    .stApp, .stMarkdown, .stText, p, h1, h2, h3, h4, h5, h6, span, label, button { 
         font-family: 'Cairo', sans-serif !important; 
-        direction: rtl; 
+    }
+    
+    /* اتجاه RTL للمحتوى فقط */
+    .stApp {
+        direction: rtl;
     }
     
     .stApp { 
@@ -48,10 +53,6 @@ st.markdown("""
     section[data-testid="stSidebar"] {
         background: linear-gradient(180deg, #161A22 0%, #1A1E28 100%);
         border-left: 1px solid var(--border-color);
-    }
-    
-    section[data-testid="stSidebar"] > div {
-        padding-top: 0 !important;
     }
 
     /* === الكروت والحاويات === */
@@ -613,14 +614,9 @@ def checkout_callback():
 # --- 6. واجهة المستخدم (Layout) ---
 
 with st.sidebar:
-    # العلامة التجارية
-    st.markdown("""
-    <div class="brand-header">
-        <span class="brand-icon">🌸</span>
-        <h2 class="brand-name">نواعم بوتيك</h2>
-        <p class="brand-tagline">نظام إدارة نقاط البيع</p>
-    </div>
-    """, unsafe_allow_html=True)
+    # العلامة التجارية - باستخدام مكونات Streamlit الأصلية
+    st.markdown("# 🌸 نواعم بوتيك")
+    st.caption("نظام إدارة نقاط البيع")
     
     st.divider()
     
@@ -840,36 +836,26 @@ elif page == "📦 المخزون":
         # خيارات العرض
         view_type = st.radio(
             "طريقة العرض:", 
-            ["� عرض المتجر (موديل × لون × مقاس)", "�📊 ملخص سريع", "📝 تفاصيل للتعديل"], 
+            ["👗 عرض المتجر", "📊 ملخص سريع", "📝 تفاصيل للتعديل"], 
             horizontal=True
         )
 
         # ========================================
-        # العرض الجديد: مصفوفة الملابس الاحترافية
+        # العرض الجديد: مصفوفة الملابس (Streamlit Native)
         # ========================================
         if "عرض المتجر" in view_type:
             # دليل الألوان
-            st.markdown("""
-            <div class="legend">
-                <div class="legend-item">
-                    <div class="legend-dot" style="background: rgba(16, 185, 129, 0.3);"></div>
-                    <span>متوفر (3+)</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-dot" style="background: rgba(245, 158, 11, 0.3);"></div>
-                    <span>قليل (1-2)</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-dot" style="background: rgba(239, 68, 68, 0.2);"></div>
-                    <span>نفذ (0)</span>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+            legend_cols = st.columns(3)
+            legend_cols[0].markdown("🟢 **متوفر** (3+)")
+            legend_cols[1].markdown("🟡 **قليل** (1-2)")
+            legend_cols[2].markdown("🔴 **نفذ** (0)")
+            
+            st.divider()
             
             # فلتر البحث
             col_search, col_stock_filter = st.columns([2, 1])
             with col_search:
-                search_model = st.text_input("� بحث عن موديل:", placeholder="اكتب اسم الموديل...", key="matrix_search")
+                search_model = st.text_input("🔍 بحث عن موديل:", placeholder="اكتب اسم الموديل...", key="matrix_search")
             with col_stock_filter:
                 show_filter = st.selectbox("عرض:", ["الكل", "متوفر فقط", "فيه نواقص"], key="matrix_filter")
             
@@ -891,58 +877,49 @@ elif page == "📦 المخزون":
                 if show_filter == "فيه نواقص" and not model_has_low:
                     continue
                 
-                # بناء HTML للموديل
-                colors_html = ""
-                for color in model_data['color'].unique():
-                    color_data = model_data[model_data['color'] == color]
-                    
-                    sizes_html = ""
-                    for _, row in color_data.iterrows():
-                        stock = int(row['stock'])
-                        size = row['size']
-                        
-                        if stock >= 3:
-                            status_class = "stock-good"
-                        elif stock > 0:
-                            status_class = "stock-low"
+                # عرض كارت الموديل باستخدام Streamlit
+                with st.container(border=True):
+                    # عنوان الموديل وحالته
+                    header_col, status_col = st.columns([3, 1])
+                    with header_col:
+                        st.markdown(f"### 👗 {model_name}")
+                    with status_col:
+                        if model_total == 0:
+                            st.error(f"نفذ ❌")
+                        elif model_has_low:
+                            st.warning(f"{model_total} قطعة ⚠️")
                         else:
-                            status_class = "stock-out"
+                            st.success(f"{model_total} قطعة ✓")
+                    
+                    # عرض الألوان والمقاسات
+                    colors = model_data['color'].unique()
+                    color_cols = st.columns(min(len(colors), 4))
+                    
+                    for idx, color in enumerate(colors):
+                        col_idx = idx % 4
+                        color_data = model_data[model_data['color'] == color]
                         
-                        sizes_html += f'<div class="size-chip {status_class}">{size}: {stock}</div>'
-                    
-                    # السعر لهذا اللون
-                    price = color_data.iloc[0]['price']
-                    
-                    colors_html += f"""
-                    <div class="color-block">
-                        <div class="color-name">🎨 {color}</div>
-                        <div class="sizes-row">{sizes_html}</div>
-                        <div class="price-tag">💵 {price:,.0f} د.ع</div>
-                    </div>
-                    """
-                
-                # حالة المخزون الكلية للموديل
-                if model_total == 0:
-                    total_style = "background: rgba(239, 68, 68, 0.2); color: #EF4444;"
-                    total_text = "نفذ ❌"
-                elif model_has_low:
-                    total_style = "background: rgba(245, 158, 11, 0.2); color: #F59E0B;"
-                    total_text = f"{model_total} قطعة ⚠️"
-                else:
-                    total_style = "background: rgba(16, 185, 129, 0.15); color: #10B981;"
-                    total_text = f"{model_total} قطعة ✓"
-                
-                st.markdown(f"""
-                <div class="model-card">
-                    <div class="model-header">
-                        <span class="model-name">👗 {model_name}</span>
-                        <span class="model-total" style="{total_style}">{total_text}</span>
-                    </div>
-                    <div class="colors-container">
-                        {colors_html}
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
+                        with color_cols[col_idx]:
+                            st.markdown(f"**🎨 {color}**")
+                            
+                            # عرض المقاسات
+                            sizes_text = ""
+                            for _, row in color_data.iterrows():
+                                stock = int(row['stock'])
+                                size = row['size']
+                                
+                                if stock >= 3:
+                                    sizes_text += f"🟢 {size}: {stock}  "
+                                elif stock > 0:
+                                    sizes_text += f"🟡 {size}: {stock}  "
+                                else:
+                                    sizes_text += f"🔴 ~~{size}: {stock}~~  "
+                            
+                            st.markdown(sizes_text)
+                            
+                            # السعر
+                            price = color_data.iloc[0]['price']
+                            st.caption(f"💵 {price:,.0f} د.ع")
             
             # زر التصدير
             st.divider()
