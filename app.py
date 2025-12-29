@@ -275,6 +275,116 @@ st.markdown("""
     ::-webkit-scrollbar-thumb:hover {
         background: #3A3F4B;
     }
+    
+    /* === عرض مخزون الملابس === */
+    .model-card {
+        background: linear-gradient(135deg, #22262F 0%, #1E2128 100%);
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 14px;
+        padding: 16px;
+        margin-bottom: 16px;
+        transition: all 0.2s ease;
+    }
+    .model-card:hover {
+        border-color: #D48896;
+        transform: translateY(-2px);
+    }
+    .model-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 14px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .model-name {
+        font-size: 18px;
+        font-weight: 700;
+        color: #fff;
+    }
+    .model-total {
+        background: rgba(212, 136, 150, 0.15);
+        color: #D48896;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 13px;
+        font-weight: 600;
+    }
+    .colors-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+    .color-block {
+        background: #2A2E38;
+        border-radius: 10px;
+        padding: 12px;
+        min-width: 140px;
+        flex: 1;
+    }
+    .color-name {
+        font-size: 14px;
+        font-weight: 600;
+        color: #E8A5B0;
+        margin-bottom: 8px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .sizes-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+    .size-chip {
+        padding: 6px 10px;
+        border-radius: 8px;
+        font-size: 12px;
+        font-weight: 600;
+        text-align: center;
+        min-width: 45px;
+    }
+    .size-chip.stock-good {
+        background: rgba(16, 185, 129, 0.2);
+        color: #10B981;
+        border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+    .size-chip.stock-low {
+        background: rgba(245, 158, 11, 0.2);
+        color: #F59E0B;
+        border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+    .size-chip.stock-out {
+        background: rgba(239, 68, 68, 0.15);
+        color: #EF4444;
+        border: 1px solid rgba(239, 68, 68, 0.2);
+        text-decoration: line-through;
+        opacity: 0.6;
+    }
+    .price-tag {
+        font-size: 11px;
+        color: #9CA3AF;
+        margin-top: 6px;
+    }
+    .legend {
+        display: flex;
+        gap: 16px;
+        justify-content: center;
+        margin-bottom: 16px;
+        flex-wrap: wrap;
+    }
+    .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        color: #9CA3AF;
+    }
+    .legend-dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 4px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -738,125 +848,6 @@ elif page == "📦 المخزون":
         # العرض الجديد: مصفوفة الملابس الاحترافية
         # ========================================
         if "عرض المتجر" in view_type:
-            st.markdown("""
-            <style>
-                .inventory-grid {
-                    background: #1A1D24;
-                    border-radius: 16px;
-                    padding: 20px;
-                    margin: 10px 0;
-                }
-                .model-card {
-                    background: linear-gradient(135deg, #22262F 0%, #1E2128 100%);
-                    border: 1px solid rgba(255,255,255,0.08);
-                    border-radius: 14px;
-                    padding: 16px;
-                    margin-bottom: 16px;
-                    transition: all 0.2s ease;
-                }
-                .model-card:hover {
-                    border-color: #D48896;
-                    transform: translateY(-2px);
-                }
-                .model-header {
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                    margin-bottom: 14px;
-                    padding-bottom: 10px;
-                    border-bottom: 1px solid rgba(255,255,255,0.06);
-                }
-                .model-name {
-                    font-size: 18px;
-                    font-weight: 700;
-                    color: #fff;
-                }
-                .model-total {
-                    background: rgba(212, 136, 150, 0.15);
-                    color: #D48896;
-                    padding: 4px 12px;
-                    border-radius: 20px;
-                    font-size: 13px;
-                    font-weight: 600;
-                }
-                .colors-container {
-                    display: flex;
-                    flex-wrap: wrap;
-                    gap: 10px;
-                }
-                .color-block {
-                    background: #2A2E38;
-                    border-radius: 10px;
-                    padding: 12px;
-                    min-width: 140px;
-                    flex: 1;
-                }
-                .color-name {
-                    font-size: 14px;
-                    font-weight: 600;
-                    color: #E8A5B0;
-                    margin-bottom: 8px;
-                    display: flex;
-                    align-items: center;
-                    gap: 6px;
-                }
-                .sizes-row {
-                    display: flex;
-                    flex-wrap: wrap;
-                    gap: 6px;
-                }
-                .size-chip {
-                    padding: 6px 10px;
-                    border-radius: 8px;
-                    font-size: 12px;
-                    font-weight: 600;
-                    text-align: center;
-                    min-width: 45px;
-                }
-                .size-chip.stock-good {
-                    background: rgba(16, 185, 129, 0.2);
-                    color: #10B981;
-                    border: 1px solid rgba(16, 185, 129, 0.3);
-                }
-                .size-chip.stock-low {
-                    background: rgba(245, 158, 11, 0.2);
-                    color: #F59E0B;
-                    border: 1px solid rgba(245, 158, 11, 0.3);
-                }
-                .size-chip.stock-out {
-                    background: rgba(239, 68, 68, 0.15);
-                    color: #EF4444;
-                    border: 1px solid rgba(239, 68, 68, 0.2);
-                    text-decoration: line-through;
-                    opacity: 0.6;
-                }
-                .price-tag {
-                    font-size: 11px;
-                    color: #9CA3AF;
-                    margin-top: 6px;
-                }
-                .legend {
-                    display: flex;
-                    gap: 16px;
-                    justify-content: center;
-                    margin-bottom: 16px;
-                    flex-wrap: wrap;
-                }
-                .legend-item {
-                    display: flex;
-                    align-items: center;
-                    gap: 6px;
-                    font-size: 12px;
-                    color: #9CA3AF;
-                }
-                .legend-dot {
-                    width: 12px;
-                    height: 12px;
-                    border-radius: 4px;
-                }
-            </style>
-            """, unsafe_allow_html=True)
-            
             # دليل الألوان
             st.markdown("""
             <div class="legend">
