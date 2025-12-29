@@ -1,65 +1,64 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime
 import pytz
 import psycopg2
 from psycopg2.extras import execute_values
 import time
 import plotly.express as px
-import plotly.graph_objects as go
-from streamlit_option_menu import option_menu
 
-# --- 1. SYSTEM CONFIGURATION ---
+# --- 1. إعدادات النظام ---
 st.set_page_config(
-    page_title="Nawaem Enterprise POS", 
+    page_title="نظام نواعم الاحترافي", 
     layout="wide", 
     page_icon="🛍️", 
     initial_sidebar_state="expanded"
 )
 
-# --- 2. PROFESSIONAL UI/UX STYLING ---
+# --- 2. التصميم الاحترافي (CSS + RTL) ---
 def inject_custom_css():
     st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;800&display=swap');
         
         :root {
-            --primary-color: #D48896; /* Dusty Rose */
+            --primary-color: #D48896; /* لون وردي غامق */
             --bg-dark: #0E1117;
             --card-bg: #1A1C24;
             --text-light: #F0F2F6;
             --border-color: #2D303E;
         }
 
-        /* Global Font & Direction */
+        /* تعميم الخط والاتجاه */
         * { font-family: 'Cairo', sans-serif !important; direction: rtl; }
         
-        /* App Background */
+        /* خلفية التطبيق */
         .stApp { background-color: var(--bg-dark); }
         
-        /* Custom Cards */
-        .css-1r6slb0, .stContainer {
+        /* الكروت والحاويات */
+        div.stContainer {
             background-color: var(--card-bg);
             border: 1px solid var(--border-color);
             border-radius: 12px;
             padding: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         }
 
-        /* Sidebar Polish */
+        /* القائمة الجانبية */
         section[data-testid="stSidebar"] {
             background-color: #12141C;
             border-left: 1px solid var(--border-color);
         }
 
-        /* Inputs */
+        /* حقول الإدخال */
         .stTextInput input, .stNumberInput input, .stSelectbox div[data-baseweb="select"] {
             background-color: #262933 !important;
             border: 1px solid #3F4354 !important;
             color: white !important;
-            border-radius: 6px !important;
+            border-radius: 8px !important;
         }
         
-        /* Metrics */
+        /* البطاقات الإحصائية (Metrics) */
         div[data-testid="stMetric"] {
             background-color: #262933;
             padding: 15px;
@@ -69,36 +68,41 @@ def inject_custom_css():
         }
         div[data-testid="stMetric"]:hover {
             border-color: var(--primary-color);
-            transform: translateY(-2px);
+            transform: translateY(-5px);
         }
-        div[data-testid="stMetricLabel"] { font-size: 14px; color: #888; }
-        div[data-testid="stMetricValue"] { color: var(--primary-color) !important; font-weight: 700; }
+        div[data-testid="stMetricLabel"] { font-size: 14px; color: #aaa; }
+        div[data-testid="stMetricValue"] { color: var(--primary-color) !important; font-weight: 800; }
 
-        /* Dataframes */
+        /* جداول البيانات */
         div[data-testid="stDataFrame"] { border: none; }
         
-        /* Receipt Style for POS */
+        /* تصميم الفاتورة الرقمية */
         .receipt-container {
             background-color: #fff;
             color: #000;
-            padding: 15px;
-            border-radius: 5px;
+            padding: 20px;
+            border-radius: 8px;
             font-family: 'Courier New', Courier, monospace !important;
-            border-top: 5px solid var(--primary-color);
+            border-top: 6px solid var(--primary-color);
+            direction: rtl;
+            text-align: right;
         }
+        .receipt-header { text-align: center; margin-bottom: 10px; border-bottom: 2px dashed #000; padding-bottom: 10px; }
+        .receipt-item { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 5px; }
+        .receipt-total { border-top: 2px dashed #000; margin-top: 10px; padding-top: 5px; font-weight: bold; font-size: 18px; text-align: center; }
     </style>
     """, unsafe_allow_html=True)
 
 inject_custom_css()
 
-# --- 3. BACKEND: CONNECTION & CACHING ---
+# --- 3. الاتصال بقاعدة البيانات ---
 
 @st.cache_resource
 def get_db_connection():
     try:
         return psycopg2.connect(**st.secrets["postgres"])
     except Exception as e:
-        st.error(f"❌ Connection Error: {e}")
+        st.error(f"❌ خطأ في الاتصال: {e}")
         st.stop()
 
 def run_query(query, params=None, fetch=True, commit=False):
@@ -115,12 +119,13 @@ def run_query(query, params=None, fetch=True, commit=False):
                 return pd.DataFrame(data, columns=col_names)
     except Exception as e:
         conn.rollback()
-        st.toast(f"Error: {e}", icon="⚠️")
+        st.toast(f"حدث خطأ: {e}", icon="⚠️")
         return None
 
 def init_db():
     conn = get_db_connection()
     with conn.cursor() as c:
+        # إنشاء الجداول الأساسية
         c.execute("""CREATE TABLE IF NOT EXISTS public.variants (
             id SERIAL PRIMARY KEY, name TEXT, color TEXT, size TEXT, 
             cost REAL, price REAL, stock INTEGER
@@ -142,7 +147,7 @@ def init_db():
         )""")
         conn.commit()
 
-# --- 4. OPTIMIZED CACHING LAYER ---
+# --- 4. وظائف جلب البيانات (Caching) ---
 
 @st.cache_data(ttl=60)
 def get_inventory(): return run_query("SELECT * FROM public.variants ORDER BY name")
@@ -160,7 +165,7 @@ def clear_cache():
 
 def get_time(): return datetime.now(pytz.timezone('Asia/Baghdad'))
 
-# --- 5. LOGIC & CALLBACKS ---
+# --- 5. المنطق البرمجي (Callbacks) ---
 
 if 'cart' not in st.session_state: st.session_state.cart = []
 if 'db_inited' not in st.session_state: init_db(); st.session_state.db_inited = True
@@ -170,7 +175,7 @@ def add_to_cart_callback():
     if not sel: return
     try:
         df = get_inventory()
-        # Parse: "Name | Color (Size)"
+        # تحليل النص: "الاسم | اللون (القياس)"
         p_name = sel.split(" | ")[0]
         p_color = sel.split(" | ")[1].split(" (")[0]
         item = df[(df['name'] == p_name) & (df['color'] == p_color)].iloc[0]
@@ -183,8 +188,8 @@ def add_to_cart_callback():
             "size": item['size'], "price": price, "qty": qty, "cost": float(item['cost']),
             "total": price * qty
         })
-        st.toast(f"Added: {item['name']}", icon="🛍️")
-    except: st.error("Error adding item")
+        st.toast(f"تمت الإضافة: {item['name']}", icon="🛍️")
+    except: st.error("خطأ في إضافة المنتج")
 
 def remove_item(idx): st.session_state.cart.pop(idx)
 
@@ -195,13 +200,13 @@ def process_checkout():
     c_select = st.session_state.get('c_selector')
     
     if c_select == "➕ عميل جديد" and not c_name:
-        st.toast("⚠️ اسم العميل مطلوب", icon="❗")
+        st.toast("⚠️ يرجى إدخال اسم العميل", icon="❗")
         return
 
     try:
         conn = get_db_connection()
         with conn.cursor() as cur:
-            # 1. Customer
+            # 1. معالجة العميل
             if c_select == "➕ عميل جديد":
                 cur.execute("INSERT INTO public.customers (name, phone, address, username) VALUES (%s, %s, %s, %s) RETURNING id", 
                            (c_name, st.session_state.c_phone, st.session_state.c_addr, c_name))
@@ -213,7 +218,7 @@ def process_checkout():
                 cust_id = int(cust_row['id'])
                 cust_display = cust_row['name']
 
-            # 2. Sales Batch
+            # 2. إدخال المبيعات وتحديث المخزون
             inv_id = get_time().strftime("%Y%m%d%H%M")
             sales_data = []
             for it in st.session_state.cart:
@@ -227,20 +232,21 @@ def process_checkout():
             
             conn.commit()
             
-            # 3. Receipt Generation
+            # 3. إنشاء نص الفاتورة للطباعة
+            total_val = sum(x['total'] for x in st.session_state.cart)
             rec = f"""
-            Nawaem Boutique | نواعم بوتيك
+            بوتيك نواعم للأزياء
             --------------------------------
-            فاتورة: {inv_id}
+            رقم الفاتورة: {inv_id}
             التاريخ: {get_time().strftime('%Y-%m-%d %H:%M')}
             العميل: {cust_display}
             --------------------------------
             """
             for x in st.session_state.cart:
-                rec += f"{x['name']} ({x['size']})\n"
-                rec += f"   {x['qty']} x {x['price']:,.0f} = {x['total']:,.0f}\n"
+                rec += f"- {x['name']} ({x['size']})\n"
+                rec += f"  {x['qty']} x {x['price']:,.0f} = {x['total']:,.0f}\n"
             rec += "--------------------------------\n"
-            rec += f"المجموع: {sum(x['total'] for x in st.session_state.cart):,.0f} د.ع"
+            rec += f"الإجمالي النهائي: {total_val:,.0f} د.ع"
             
             st.session_state.last_receipt = rec
             st.session_state.cart = []
@@ -248,37 +254,31 @@ def process_checkout():
             
     except Exception as e:
         conn.rollback()
-        st.error(f"System Error: {e}")
+        st.error(f"خطأ في النظام: {e}")
 
-# --- 6. NAVIGATION & LAYOUT ---
+# --- 6. القائمة الجانبية والصفحات ---
 
 with st.sidebar:
-    st.image("https://cdn-icons-png.flaticon.com/512/3502/3502685.png", width=60)
-    st.markdown("<h3 style='text-align: center; color: #D48896;'>Nawaem OS</h3>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center; color: #D48896;'>نواعم سيستم</h2>", unsafe_allow_html=True)
+    st.markdown("---")
     
-    selected_page = option_menu(
-        menu_title=None,
-        options=["Dashboard", "Point of Sale", "Inventory", "Customers", "Expenses"],
-        icons=["speedometer2", "cart4", "box-seam", "people", "wallet2"],
-        menu_icon="cast",
-        default_index=1,
-        styles={
-            "container": {"padding": "0!important", "background-color": "transparent"},
-            "icon": {"color": "#D48896", "font-size": "16px"}, 
-            "nav-link": {"font-size": "15px", "text-align": "right", "margin":"5px", "--hover-color": "#262933"},
-            "nav-link-selected": {"background-color": "#D48896", "font-weight": "600"},
-        }
+    # قائمة عربية مدمجة
+    selected_page = st.radio(
+        "القائمة الرئيسية",
+        ["لوحة القيادة", "نقطة البيع (POS)", "إدارة المخزون", "قاعدة العملاء", "المصاريف"],
+        index=1
     )
-    st.divider()
-    if st.button("🔄 Sync Data", use_container_width=True):
+    
+    st.markdown("---")
+    if st.button("🔄 مزامنة البيانات", use_container_width=True):
         clear_cache()
         st.rerun()
 
 # =========================================================
-# 📊 DASHBOARD (Business Intelligence)
+# 📊 لوحة القيادة (Dashboard)
 # =========================================================
-if selected_page == "Dashboard":
-    st.title("📊 Business Overview")
+if selected_page == "لوحة القيادة":
+    st.title("📊 نظرة عامة على النشاط")
     
     df_s = get_sales(2000)
     df_inv = get_inventory()
@@ -286,134 +286,149 @@ if selected_page == "Dashboard":
     if not df_s.empty:
         df_s['date'] = pd.to_datetime(df_s['date'])
         
-        # --- TOP LEVEL METRICS ---
+        # المقاييس العلوية
         today = pd.Timestamp.now().normalize()
         sales_today = df_s[df_s['date'] >= today]
         sales_month = df_s[df_s['date'] >= today.replace(day=1)]
         
         col1, col2, col3, col4 = st.columns(4)
-        col1.metric("Today's Revenue", f"{sales_today['total'].sum():,.0f} IQD", f"{len(sales_today)} Orders")
-        col2.metric("Monthly Revenue", f"{sales_month['total'].sum():,.0f} IQD")
-        col3.metric("Total Net Profit", f"{sales_month['profit'].sum():,.0f} IQD")
-        col4.metric("Inventory Value", f"{(df_inv['stock'] * df_inv['cost']).sum():,.0f} IQD")
+        col1.metric("مبيعات اليوم", f"{sales_today['total'].sum():,.0f} د.ع", f"{len(sales_today)} طلب")
+        col2.metric("إيراد الشهر الحالي", f"{sales_month['total'].sum():,.0f} د.ع")
+        col3.metric("صافي الأرباح (الشهري)", f"{sales_month['profit'].sum():,.0f} د.ع")
+        col4.metric("قيمة بضاعة المخزن", f"{(df_inv['stock'] * df_inv['cost']).sum():,.0f} د.ع")
         
-        # --- CHARTS (Plotly) ---
+        # الرسوم البيانية
         col_c1, col_c2 = st.columns([2, 1])
         
         with col_c1:
-            st.subheader("📈 Revenue Trend (30 Days)")
+            st.subheader("📈 منحنى المبيعات (30 يوم)")
             daily_sales = df_s.groupby(df_s['date'].dt.date)['total'].sum().reset_index()
-            fig = px.area(daily_sales, x='date', y='total', color_discrete_sequence=['#D48896'])
+            # استخدام Plotly للرسم
+            fig = px.area(daily_sales, x='date', y='total', labels={'date':'التاريخ', 'total':'المبيعات'}, color_discrete_sequence=['#D48896'])
             fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="white")
             st.plotly_chart(fig, use_container_width=True)
             
         with col_c2:
-            st.subheader("🏆 Top Products")
+            st.subheader("🏆 المنتجات الأكثر طلباً")
             top_prod = df_s.groupby('product_name')['qty'].sum().nlargest(5).reset_index()
             fig2 = px.pie(top_prod, values='qty', names='product_name', hole=0.6, color_discrete_sequence=px.colors.sequential.RdBu)
             fig2.update_layout(showlegend=False, paper_bgcolor="rgba(0,0,0,0)", font_color="white")
             st.plotly_chart(fig2, use_container_width=True)
 
 # =========================================================
-# 🛒 POINT OF SALE (Professional Interface)
+# 🛒 نقطة البيع (POS)
 # =========================================================
-elif selected_page == "Point of Sale":
+elif selected_page == "نقطة البيع (POS)":
     c_left, c_right = st.columns([2, 1.2], gap="medium")
     
-    # --- PRODUCT GRID ---
+    # --- قسم اختيار المنتجات ---
     with c_left:
-        st.subheader("🛍️ Product Selection")
+        st.subheader("🛍️ قائمة المنتجات")
         df = get_inventory()
         if not df.empty:
             df_active = df[df['stock'] > 0].copy()
             df_active['display'] = df_active['name'] + " | " + df_active['color'] + " (" + df_active['size'] + ")"
             
-            # Styled Selectbox
-            sel = st.selectbox("Search Product...", df_active['display'].tolist(), index=None, key="pos_selection", placeholder="Type name or color code...")
+            # بحث وتحديد
+            sel = st.selectbox("بحث عن منتج...", df_active['display'].tolist(), index=None, key="pos_selection", placeholder="اكتب الاسم أو اللون...")
             
             if sel:
                 item = df_active[df_active['display'] == sel].iloc[0]
                 with st.container():
+                    # بطاقة تفاصيل المنتج
                     i1, i2, i3 = st.columns(3)
-                    i1.metric("Stock", item['stock'])
-                    i2.metric("Price", f"{item['price']:,.0f}")
-                    i3.metric("Size", item['size'])
+                    i1.metric("المتوفر", item['stock'])
+                    i2.metric("السعر", f"{item['price']:,.0f}")
+                    i3.metric("القياس", item['size'])
                     
                     st.divider()
                     
+                    # نموذج الإضافة للسلة
                     f1, f2, f3 = st.columns([1, 1, 2])
-                    f1.number_input("Qty", 1, int(item['stock']), 1, key="pos_qty")
-                    f2.number_input("Unit Price", value=float(item['price']), key="pos_price")
+                    f1.number_input("العدد", 1, int(item['stock']), 1, key="pos_qty")
+                    f2.number_input("سعر البيع للقطعة", value=float(item['price']), key="pos_price")
                     f3.markdown("<br>", unsafe_allow_html=True)
-                    f3.button("🛒 Add Item", type="primary", use_container_width=True, on_click=add_to_cart_callback)
+                    f3.button("🛒 إضافة للسلة", type="primary", use_container_width=True, on_click=add_to_cart_callback)
 
-    # --- DIGITAL RECEIPT ---
+    # --- الفاتورة الحالية والدفع ---
     with c_right:
-        st.subheader("🧾 Current Order")
+        st.subheader("🧾 الطلب الحالي")
         
-        # Receipt Visual Container
+        # تصميم الفاتورة الحرارية
         st.markdown('<div class="receipt-container">', unsafe_allow_html=True)
+        st.markdown('<div class="receipt-header">بوتيك نواعم<br>فاتورة مبدئية</div>', unsafe_allow_html=True)
+        
         if not st.session_state.cart:
-            st.markdown("<p style='text-align:center; color:#888; padding:20px;'>Empty Cart</p>", unsafe_allow_html=True)
+            st.markdown("<p style='text-align:center; color:#888;'>السلة فارغة</p>", unsafe_allow_html=True)
         else:
             total = 0
             for i, item in enumerate(st.session_state.cart):
-                c1, c2 = st.columns([4, 1])
-                c1.markdown(f"<div style='color:black; font-family:monospace; font-weight:bold'>{item['name']}</div><div style='color:#555; font-size:12px'>{item['qty']} x {item['price']:,.0f} = {item['total']:,.0f}</div>", unsafe_allow_html=True)
-                c2.button("🗑️", key=f"rm_{i}", on_click=remove_item, args=(i,))
+                # عرض كل عنصر في الفاتورة
+                col_row1, col_row2 = st.columns([4, 1])
+                with col_row1:
+                    st.markdown(f"""
+                    <div class="receipt-item">
+                        <span>{item['name']} ({item['size']})</span>
+                    </div>
+                    <div style="font-size:12px; color:#555;">
+                        {item['qty']} x {item['price']:,.0f} = {item['total']:,.0f}
+                    </div>
+                    """, unsafe_allow_html=True)
+                with col_row2:
+                    st.button("✖", key=f"rm_{i}", on_click=remove_item, args=(i,), help="حذف")
+                
                 total += item['total']
-                st.markdown("<hr style='margin:5px 0; border-top:1px dashed #ccc;'>", unsafe_allow_html=True)
             
-            st.markdown(f"<h3 style='color:black; text-align:center; margin-top:10px;'>Total: {total:,.0f} IQD</h3>", unsafe_allow_html=True)
+            st.markdown(f'<div class="receipt-total">الإجمالي: {total:,.0f} د.ع</div>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
         
-        # Checkout Form
+        # نموذج إتمام البيع
         with st.container():
-            st.markdown("##### 👤 Customer Details")
+            st.markdown("##### 👤 بيانات العميل")
             df_c = get_customers()
-            st.selectbox("Select Customer", ["➕ عميل جديد"] + df_c['name'].tolist(), key="c_selector")
+            st.selectbox("اختر العميل", ["➕ عميل جديد"] + df_c['name'].tolist(), key="c_selector")
             
             if st.session_state.c_selector == "➕ عميل جديد":
                 c1, c2 = st.columns(2)
-                c1.text_input("Full Name", key="c_name_input")
-                c2.text_input("Phone", key="c_phone")
-                st.text_input("Address", key="c_addr")
+                c1.text_input("الاسم الكامل", key="c_name_input")
+                c2.text_input("رقم الهاتف", key="c_phone")
+                st.text_input("العنوان", key="c_addr")
             
-            st.select_slider("Delivery Speed", options=["Immediate", "24 Hours", "48 Hours"], key="c_dur")
+            st.select_slider("موعد التوصيل", options=["فوري (استلام محل)", "خلال 24 ساعة", "خلال 48 ساعة"], key="c_dur")
             
-            if st.button("✅ COMPLETE ORDER", type="primary", use_container_width=True, on_click=process_checkout):
+            if st.button("✅ تأكيد البيع وطباعة", type="primary", use_container_width=True, on_click=process_checkout):
                 pass
 
-        # Print Modal
+        # نافذة الطباعة بعد البيع
         if 'last_receipt' in st.session_state:
-            st.success("Transaction Complete!")
-            st.code(st.session_state.last_receipt, language="text")
-            if st.button("New Order"):
+            st.success("تمت العملية بنجاح!")
+            st.text_area("نص الفاتورة للنسخ", st.session_state.last_receipt, height=200)
+            if st.button("بدء فاتورة جديدة"):
                 del st.session_state.last_receipt
                 st.rerun()
 
 # =========================================================
-# 📦 INVENTORY (Ag-Grid Style)
+# 📦 إدارة المخزون (Excel Grid)
 # =========================================================
-elif selected_page == "Inventory":
-    st.title("📦 Inventory Management")
+elif selected_page == "إدارة المخزون":
+    st.title("📦 إدارة المخزون الشاملة")
     
-    # KPIs Row
     df = get_inventory()
     if not df.empty:
+        # ملخص سريع
         c1, c2, c3 = st.columns(3)
-        c1.metric("Total Items", int(df['stock'].sum()), border=True)
-        c2.metric("Total Cost (Capital)", f"{(df['stock']*df['cost']).sum():,.0f}", border=True)
-        c3.metric("Potential Sales", f"{(df['stock']*df['price']).sum():,.0f}", border=True)
+        c1.metric("إجمالي القطع", int(df['stock'].sum()), border=True)
+        c2.metric("التكلفة الكلية (رأس المال)", f"{(df['stock']*df['cost']).sum():,.0f}", border=True)
+        c3.metric("المبيعات المتوقعة", f"{(df['stock']*df['price']).sum():,.0f}", border=True)
 
-        st.markdown("### 📝 Master Data Editor")
+        st.markdown("### 📝 تعديل بيانات المنتجات")
         
-        # Professional Search
-        search = st.text_input("🔍 Filter Inventory", placeholder="Search by model name, color or size...")
+        # فلتر البحث
+        search = st.text_input("🔍 تصفية الجدول", placeholder="ابحث باسم الموديل، اللون، أو القياس...")
         if search:
             df = df[df['name'].str.contains(search, case=False) | df['color'].str.contains(search, case=False)]
 
-        # Advanced Data Editor
+        # المحرر الذكي
         edited_df = st.data_editor(
             df,
             key="pro_inv_editor",
@@ -421,60 +436,58 @@ elif selected_page == "Inventory":
             hide_index=True,
             num_rows="dynamic",
             column_config={
-                "id": None,
-                "name": st.column_config.TextColumn("Model Name", width="medium", required=True),
-                "color": st.column_config.TextColumn("Color", width="small"),
-                "size": st.column_config.SelectboxColumn("Size", options=["S","M","L","XL","XXL","Free"], width="small"),
-                "stock": st.column_config.ProgressColumn("Stock Level", format="%d", min_value=0, max_value=int(df['stock'].max())),
-                "cost": st.column_config.NumberColumn("Cost Price", format="%.0f IQD"),
-                "price": st.column_config.NumberColumn("Sale Price", format="%.0f IQD"),
+                "id": None, # إخفاء المعرف
+                "name": st.column_config.TextColumn("اسم الموديل", width="medium", required=True),
+                "color": st.column_config.TextColumn("اللون", width="small"),
+                "size": st.column_config.SelectboxColumn("القياس", options=["S","M","L","XL","XXL","Free"], width="small"),
+                "stock": st.column_config.ProgressColumn("مستوى المخزون", format="%d", min_value=0, max_value=int(df['stock'].max())),
+                "cost": st.column_config.NumberColumn("سعر التكلفة", format="%.0f د.ع"),
+                "price": st.column_config.NumberColumn("سعر البيع", format="%.0f د.ع"),
+                # إخفاء الأعمدة المحسوبة إن وجدت
+                "total_cost_value": None,
+                "total_sale_potential": None
             }
         )
         
+        # زر الحفظ
         col_btn, _ = st.columns([1, 4])
-        if col_btn.button("💾 Save Changes", type="primary"):
-            # Update Logic (Batched)
+        if col_btn.button("💾 حفظ التغييرات", type="primary"):
             conn = get_db_connection()
-            changes = []
-            new_items = []
-            
-            # Simple diff logic (optimized for simplicity here)
-            # In production, check row state. Here we upsert everything for safety.
             with conn.cursor() as cur:
-                # 1. Update existing
                 for i, row in edited_df.iterrows():
+                    # تحديث الصفوف الموجودة (التي لها ID)
                     if pd.notna(row['id']):
                         cur.execute("""UPDATE public.variants 
                             SET name=%s, color=%s, size=%s, stock=%s, cost=%s, price=%s 
                             WHERE id=%s""", 
                             (row['name'], row['color'], row['size'], row['stock'], row['cost'], row['price'], row['id']))
+                    # إضافة الصفوف الجديدة (بدون ID)
                     else:
-                        # 2. Insert new rows added via the editor
-                        if row['name']:
+                        if row['name']: # شرط وجود اسم
                             cur.execute("""INSERT INTO public.variants 
                                 (name, color, size, stock, cost, price) VALUES (%s,%s,%s,%s,%s,%s)""",
                                 (row['name'], row['color'], row['size'], row['stock'], row['cost'], row['price']))
                 conn.commit()
             
             clear_cache()
-            st.toast("Inventory Synced Successfully", icon="✅")
+            st.toast("تم تحديث المخزون بنجاح", icon="✅")
             time.sleep(1)
             st.rerun()
 
 # =========================================================
-# 👥 CUSTOMERS & EXPENSES
+# 👥 العملاء والمصاريف
 # =========================================================
-elif selected_page == "Customers":
-    st.title("👥 Customer Database")
+elif selected_page == "قاعدة العملاء":
+    st.title("👥 قاعدة بيانات العملاء")
     st.dataframe(get_customers(), use_container_width=True, hide_index=True)
 
-elif selected_page == "Expenses":
-    st.title("💸 Expense Tracker")
+elif selected_page == "المصاريف":
+    st.title("💸 سجل المصاريف اليومية")
     with st.form("new_exp"):
         c1, c2 = st.columns(2)
-        amt = c1.number_input("Amount (IQD)", step=1000.0)
-        rsn = c2.text_input("Reason / Category")
-        if st.form_submit_button("Record Expense"):
+        amt = c1.number_input("المبلغ (د.ع)", step=1000.0)
+        rsn = c2.text_input("سبب الصرف / التفاصيل")
+        if st.form_submit_button("تسجيل المصروف"):
             run_query("INSERT INTO public.expenses (amount, reason, date) VALUES (%s, %s, %s)", 
                       (amt, rsn, get_time()), commit=True, fetch=False)
-            st.success("Recorded!")
+            st.success("تم التسجيل!")
