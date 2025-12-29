@@ -841,23 +841,17 @@ elif page == "📦 المخزون":
         )
 
         # ========================================
-        # العرض الجديد: مصفوفة الملابس (Streamlit Native)
+        # العرض الجديد: عرض المتجر (نظيف ومرتب)
         # ========================================
         if "عرض المتجر" in view_type:
-            # دليل الألوان
-            legend_cols = st.columns(3)
-            legend_cols[0].markdown("🟢 **متوفر** (3+)")
-            legend_cols[1].markdown("🟡 **قليل** (1-2)")
-            legend_cols[2].markdown("🔴 **نفذ** (0)")
-            
-            st.divider()
-            
             # فلتر البحث
             col_search, col_stock_filter = st.columns([2, 1])
             with col_search:
                 search_model = st.text_input("🔍 بحث عن موديل:", placeholder="اكتب اسم الموديل...", key="matrix_search")
             with col_stock_filter:
                 show_filter = st.selectbox("عرض:", ["الكل", "متوفر فقط", "فيه نواقص"], key="matrix_filter")
+            
+            st.divider()
             
             # تجميع البيانات حسب الموديل
             models = df['name'].unique()
@@ -868,7 +862,7 @@ elif page == "📦 المخزون":
                     continue
                 
                 model_data = df[df['name'] == model_name]
-                model_total = model_data['stock'].sum()
+                model_total = int(model_data['stock'].sum())
                 model_has_low = (model_data['stock'] < 3).any()
                 
                 # تطبيق فلتر المخزون
@@ -877,49 +871,41 @@ elif page == "📦 المخزون":
                 if show_filter == "فيه نواقص" and not model_has_low:
                     continue
                 
-                # عرض كارت الموديل باستخدام Streamlit
-                with st.container(border=True):
-                    # عنوان الموديل وحالته
-                    header_col, status_col = st.columns([3, 1])
-                    with header_col:
-                        st.markdown(f"### 👗 {model_name}")
-                    with status_col:
-                        if model_total == 0:
-                            st.error(f"نفذ ❌")
-                        elif model_has_low:
-                            st.warning(f"{model_total} قطعة ⚠️")
-                        else:
-                            st.success(f"{model_total} قطعة ✓")
-                    
-                    # عرض الألوان والمقاسات
-                    colors = model_data['color'].unique()
-                    color_cols = st.columns(min(len(colors), 4))
-                    
-                    for idx, color in enumerate(colors):
-                        col_idx = idx % 4
+                # حالة المخزون
+                if model_total == 0:
+                    status_icon = "🔴"
+                    status_text = f"{model_name} - نفذ"
+                elif model_has_low:
+                    status_icon = "🟡"
+                    status_text = f"{model_name} ({model_total} قطعة)"
+                else:
+                    status_icon = "🟢"
+                    status_text = f"{model_name} ({model_total} قطعة)"
+                
+                # عرض الموديل في Expander
+                with st.expander(f"{status_icon} {status_text}", expanded=False):
+                    # جدول لكل لون
+                    for color in model_data['color'].unique():
                         color_data = model_data[model_data['color'] == color]
+                        price = color_data.iloc[0]['price']
                         
-                        with color_cols[col_idx]:
-                            st.markdown(f"**🎨 {color}**")
+                        st.markdown(f"**🎨 {color}** - 💵 {price:,.0f} د.ع")
+                        
+                        # عرض المقاسات في صف واحد
+                        size_cols = st.columns(len(color_data))
+                        for idx, (_, row) in enumerate(color_data.iterrows()):
+                            stock = int(row['stock'])
+                            size = row['size']
                             
-                            # عرض المقاسات
-                            sizes_text = ""
-                            for _, row in color_data.iterrows():
-                                stock = int(row['stock'])
-                                size = row['size']
-                                
+                            with size_cols[idx]:
                                 if stock >= 3:
-                                    sizes_text += f"🟢 {size}: {stock}  "
+                                    st.success(f"{size}: {stock}")
                                 elif stock > 0:
-                                    sizes_text += f"🟡 {size}: {stock}  "
+                                    st.warning(f"{size}: {stock}")
                                 else:
-                                    sizes_text += f"🔴 ~~{size}: {stock}~~  "
-                            
-                            st.markdown(sizes_text)
-                            
-                            # السعر
-                            price = color_data.iloc[0]['price']
-                            st.caption(f"💵 {price:,.0f} د.ع")
+                                    st.error(f"{size}: 0")
+                        
+                        st.markdown("---")
             
             # زر التصدير
             st.divider()
