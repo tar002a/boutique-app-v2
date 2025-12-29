@@ -703,14 +703,14 @@ if page == "🛒 نقطة البيع":
                 st.rerun()
 
 # ==========================================
-# صفحة 2: المخزون
+# صفحة 2: المخزون (عرض احترافي لمتجر ملابس)
 # ==========================================
 elif page == "📦 المخزون":
-    st.markdown("## 📦 لوحة التحكم بالمخزون")
+    st.markdown("## � مخزون المتجر")
 
     df = get_inventory()
     if df is not None and not df.empty:
-        # مؤشرات الأداء
+        # مؤشرات الأداء السريعة
         df['total_cost_value'] = df['stock'] * df['cost']
         df['total_sale_potential'] = df['stock'] * df['price']
 
@@ -730,11 +730,244 @@ elif page == "📦 المخزون":
         # خيارات العرض
         view_type = st.radio(
             "طريقة العرض:", 
-            ["📊 ملخص الموديلات", "📝 تفاصيل كاملة (للتعديل)"], 
+            ["� عرض المتجر (موديل × لون × مقاس)", "�📊 ملخص سريع", "📝 تفاصيل للتعديل"], 
             horizontal=True
         )
 
-        if "ملخص" in view_type:
+        # ========================================
+        # العرض الجديد: مصفوفة الملابس الاحترافية
+        # ========================================
+        if "عرض المتجر" in view_type:
+            st.markdown("""
+            <style>
+                .inventory-grid {
+                    background: #1A1D24;
+                    border-radius: 16px;
+                    padding: 20px;
+                    margin: 10px 0;
+                }
+                .model-card {
+                    background: linear-gradient(135deg, #22262F 0%, #1E2128 100%);
+                    border: 1px solid rgba(255,255,255,0.08);
+                    border-radius: 14px;
+                    padding: 16px;
+                    margin-bottom: 16px;
+                    transition: all 0.2s ease;
+                }
+                .model-card:hover {
+                    border-color: #D48896;
+                    transform: translateY(-2px);
+                }
+                .model-header {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    margin-bottom: 14px;
+                    padding-bottom: 10px;
+                    border-bottom: 1px solid rgba(255,255,255,0.06);
+                }
+                .model-name {
+                    font-size: 18px;
+                    font-weight: 700;
+                    color: #fff;
+                }
+                .model-total {
+                    background: rgba(212, 136, 150, 0.15);
+                    color: #D48896;
+                    padding: 4px 12px;
+                    border-radius: 20px;
+                    font-size: 13px;
+                    font-weight: 600;
+                }
+                .colors-container {
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 10px;
+                }
+                .color-block {
+                    background: #2A2E38;
+                    border-radius: 10px;
+                    padding: 12px;
+                    min-width: 140px;
+                    flex: 1;
+                }
+                .color-name {
+                    font-size: 14px;
+                    font-weight: 600;
+                    color: #E8A5B0;
+                    margin-bottom: 8px;
+                    display: flex;
+                    align-items: center;
+                    gap: 6px;
+                }
+                .sizes-row {
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 6px;
+                }
+                .size-chip {
+                    padding: 6px 10px;
+                    border-radius: 8px;
+                    font-size: 12px;
+                    font-weight: 600;
+                    text-align: center;
+                    min-width: 45px;
+                }
+                .size-chip.stock-good {
+                    background: rgba(16, 185, 129, 0.2);
+                    color: #10B981;
+                    border: 1px solid rgba(16, 185, 129, 0.3);
+                }
+                .size-chip.stock-low {
+                    background: rgba(245, 158, 11, 0.2);
+                    color: #F59E0B;
+                    border: 1px solid rgba(245, 158, 11, 0.3);
+                }
+                .size-chip.stock-out {
+                    background: rgba(239, 68, 68, 0.15);
+                    color: #EF4444;
+                    border: 1px solid rgba(239, 68, 68, 0.2);
+                    text-decoration: line-through;
+                    opacity: 0.6;
+                }
+                .price-tag {
+                    font-size: 11px;
+                    color: #9CA3AF;
+                    margin-top: 6px;
+                }
+                .legend {
+                    display: flex;
+                    gap: 16px;
+                    justify-content: center;
+                    margin-bottom: 16px;
+                    flex-wrap: wrap;
+                }
+                .legend-item {
+                    display: flex;
+                    align-items: center;
+                    gap: 6px;
+                    font-size: 12px;
+                    color: #9CA3AF;
+                }
+                .legend-dot {
+                    width: 12px;
+                    height: 12px;
+                    border-radius: 4px;
+                }
+            </style>
+            """, unsafe_allow_html=True)
+            
+            # دليل الألوان
+            st.markdown("""
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-dot" style="background: rgba(16, 185, 129, 0.3);"></div>
+                    <span>متوفر (3+)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-dot" style="background: rgba(245, 158, 11, 0.3);"></div>
+                    <span>قليل (1-2)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-dot" style="background: rgba(239, 68, 68, 0.2);"></div>
+                    <span>نفذ (0)</span>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # فلتر البحث
+            col_search, col_stock_filter = st.columns([2, 1])
+            with col_search:
+                search_model = st.text_input("� بحث عن موديل:", placeholder="اكتب اسم الموديل...", key="matrix_search")
+            with col_stock_filter:
+                show_filter = st.selectbox("عرض:", ["الكل", "متوفر فقط", "فيه نواقص"], key="matrix_filter")
+            
+            # تجميع البيانات حسب الموديل
+            models = df['name'].unique()
+            
+            for model_name in sorted(models):
+                # تطبيق فلتر البحث
+                if search_model and search_model.lower() not in model_name.lower():
+                    continue
+                
+                model_data = df[df['name'] == model_name]
+                model_total = model_data['stock'].sum()
+                model_has_low = (model_data['stock'] < 3).any()
+                
+                # تطبيق فلتر المخزون
+                if show_filter == "متوفر فقط" and model_total == 0:
+                    continue
+                if show_filter == "فيه نواقص" and not model_has_low:
+                    continue
+                
+                # بناء HTML للموديل
+                colors_html = ""
+                for color in model_data['color'].unique():
+                    color_data = model_data[model_data['color'] == color]
+                    
+                    sizes_html = ""
+                    for _, row in color_data.iterrows():
+                        stock = int(row['stock'])
+                        size = row['size']
+                        
+                        if stock >= 3:
+                            status_class = "stock-good"
+                        elif stock > 0:
+                            status_class = "stock-low"
+                        else:
+                            status_class = "stock-out"
+                        
+                        sizes_html += f'<div class="size-chip {status_class}">{size}: {stock}</div>'
+                    
+                    # السعر لهذا اللون
+                    price = color_data.iloc[0]['price']
+                    
+                    colors_html += f"""
+                    <div class="color-block">
+                        <div class="color-name">🎨 {color}</div>
+                        <div class="sizes-row">{sizes_html}</div>
+                        <div class="price-tag">💵 {price:,.0f} د.ع</div>
+                    </div>
+                    """
+                
+                # حالة المخزون الكلية للموديل
+                if model_total == 0:
+                    total_style = "background: rgba(239, 68, 68, 0.2); color: #EF4444;"
+                    total_text = "نفذ ❌"
+                elif model_has_low:
+                    total_style = "background: rgba(245, 158, 11, 0.2); color: #F59E0B;"
+                    total_text = f"{model_total} قطعة ⚠️"
+                else:
+                    total_style = "background: rgba(16, 185, 129, 0.15); color: #10B981;"
+                    total_text = f"{model_total} قطعة ✓"
+                
+                st.markdown(f"""
+                <div class="model-card">
+                    <div class="model-header">
+                        <span class="model-name">👗 {model_name}</span>
+                        <span class="model-total" style="{total_style}">{total_text}</span>
+                    </div>
+                    <div class="colors-container">
+                        {colors_html}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            # زر التصدير
+            st.divider()
+            csv = df.to_csv(index=False).encode('utf-8-sig')
+            st.download_button(
+                "📥 تصدير المخزون كاملاً (CSV)",
+                csv,
+                "inventory_full.csv",
+                "text/csv",
+                use_container_width=False
+            )
+
+        # ========================================
+        # العرض الملخص السريع
+        # ========================================
+        elif "ملخص" in view_type:
             grouped = df.groupby('name').agg({
                 'stock': 'sum',
                 'color': 'count',
@@ -757,8 +990,11 @@ elif page == "📦 المخزون":
                 },
                 hide_index=True
             )
+        
+        # ========================================
+        # العرض التفصيلي للتعديل
+        # ========================================
         else:
-            # بحث وفلترة
             col_search, col_filter = st.columns([2, 1])
             with col_search:
                 search = st.text_input("🔍 بحث:", placeholder="اكتب للفلترة...")
