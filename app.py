@@ -1,12 +1,12 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime
 import pytz
 import psycopg2
-from difflib import SequenceMatcher
+from psycopg2.extras import execute_values
 import time
 
-# --- 1. إعداد الصفحة والتصميم (UI/UX) ---
+# --- 1. Page Configuration & Modern UI ---
 st.set_page_config(
     page_title="Nawaem POS 🚀", 
     layout="wide", 
@@ -14,79 +14,96 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# ألوان وتصميم عصري (Glassmorphism)
+# Optimized Glassmorphism CSS with better responsiveness
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;800&display=swap');
     
     :root {
-        --primary: #D48896; /* لون وردي غامق راقي */
-        --bg-dark: #121212;
-        --card-bg: #1E1E1E;
-        --text-main: #E0E0E0;
-        --success: #4CAF50;
+        --primary: #D48896;
+        --secondary: #2C2C2C;
+        --bg-dark: #0E1117;
+        --text-main: #FAFAFA;
     }
 
-    /* تعميم الخط والاتجاه */
     * { font-family: 'Cairo', sans-serif !important; direction: rtl; }
     
+    /* Global App Style */
     .stApp { background-color: var(--bg-dark); }
-
-    /* تحسين القائمة الجانبية */
+    
+    /* Sidebar Styling */
     section[data-testid="stSidebar"] {
-        background-color: #181818;
+        background-color: #161a20;
         border-left: 1px solid #333;
     }
-    
-    /* الكروت */
-    .metric-card {
-        background: rgba(30, 30, 30, 0.7);
-        backdrop-filter: blur(10px);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 15px;
-        padding: 20px;
-        text-align: center;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        transition: transform 0.2s;
-    }
-    .metric-card:hover { transform: translateY(-5px); border-color: var(--primary); }
-    
-    .metric-value { font-size: 24px; font-weight: 800; color: var(--primary); }
-    .metric-label { font-size: 14px; color: #888; margin-bottom: 5px; }
 
-    /* الأزرار */
-    .stButton button {
+    /* Custom Cards */
+    div.stContainer {
+        background: rgba(30, 30, 30, 0.4);
+        border: 1px solid rgba(255, 255, 255, 0.08);
         border-radius: 12px;
-        font-weight: 700;
-        transition: all 0.3s ease;
+        padding: 15px;
     }
-    .stButton button:hover { transform: scale(1.02); }
+
+    /* Input Fields */
+    .stTextInput input, .stNumberInput input, .stSelectbox div[data-baseweb="select"] {
+        background-color: #1E1E1E !important;
+        border: 1px solid #444 !important;
+        color: white !important;
+        border-radius: 8px !important;
+    }
+
+    /* Buttons */
+    .stButton button {
+        border-radius: 8px;
+        font-weight: 700;
+        border: none;
+        transition: all 0.2s ease-in-out;
+    }
+    .stButton button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(212, 136, 150, 0.3);
+    }
+
+    /* Data Editor */
+    div[data-testid="stDataFrame"] { border: none; }
     
-    /* الجداول */
-    div[data-testid="stDataFrame"] { border-radius: 10px; overflow: hidden; border: 1px solid #333; }
-    
-    /* حقول الإدخال */
-    div[data-baseweb="input"] { background-color: #252525; border-radius: 10px; border: none; }
+    /* Metrics */
+    div[data-testid="stMetricValue"] {
+        color: var(--primary) !important;
+        font-weight: 800 !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. إدارة الاتصال وقاعدة البيانات (Backend Optimization) ---
+# --- 2. Database & Connection Management ---
 
 @st.cache_resource
-def init_connection():
-    """اتصال واحد فقط يتم مشاركته (Singleton) لتقليل الضغط"""
+def get_db_connection():
+    """Singleton connection pool wrapper"""
+    return psycopg2.connect(**st.secrets["postgres"])
+
+def run_query(query, params=None, fetch=True, commit=False):
+    """Safe query execution wrapper"""
+    conn = get_db_connection()
     try:
-        return psycopg2.connect(**st.secrets["postgres"])
+        with conn.cursor() as cur:
+            cur.execute(query, params)
+            if commit:
+                conn.commit()
+                return True
+            if fetch:
+                col_names = [desc[0] for desc in cur.description]
+                data = cur.fetchall()
+                return pd.DataFrame(data, columns=col_names)
     except Exception as e:
-        st.error(f"❌ فشل الاتصال بقاعدة البيانات: {e}")
-        st.stop()
+        conn.rollback()
+        st.error(f"Database Error: {e}")
+        return None
 
-conn = init_connection()
-
-# تهيئة الجداول (مرة واحدة فقط عند التشغيل)
 def init_db():
+    conn = get_db_connection()
     with conn.cursor() as c:
-        # إنشاء الجداول إذا لم تكن موجودة
         c.execute("""CREATE TABLE IF NOT EXISTS public.variants (
             id SERIAL PRIMARY KEY, name TEXT, color TEXT, size TEXT, cost REAL, price REAL, stock INTEGER
         )""")
@@ -107,367 +124,360 @@ def init_db():
         )""")
         conn.commit()
 
-# --- 3. دوال البيانات السريعة (Cached Data Functions) ---
-# السرعة تأتي من هنا: لا نطلب البيانات من السيرفر إلا عند الضرورة
+# --- 3. Optimized Data Fetching (Caching) ---
+
+@st.cache_data(ttl=60)
+def get_inventory():
+    return run_query("SELECT * FROM public.variants ORDER BY name")
 
 @st.cache_data(ttl=300)
-def get_inventory_data():
-    """جلب المخزون وتخزينه في الكاش لمدة 5 دقائق أو حتى التحديث"""
-    try:
-        return pd.read_sql("SELECT * FROM public.variants ORDER BY name", conn)
-    except: return pd.DataFrame()
+def get_customers():
+    return run_query("SELECT * FROM public.customers ORDER BY name")
 
-@st.cache_data(ttl=300)
-def get_customers_data():
-    try:
-        return pd.read_sql("SELECT * FROM public.customers ORDER BY name", conn)
-    except: return pd.DataFrame()
+@st.cache_data(ttl=60)
+def get_sales(limit=100):
+    return run_query(f"SELECT * FROM public.sales ORDER BY date DESC LIMIT {limit}")
 
-@st.cache_data(ttl=60) 
-def get_sales_data(limit=100):
-    try:
-        return pd.read_sql(f"SELECT * FROM public.sales ORDER BY date DESC LIMIT {limit}", conn)
-    except: return pd.DataFrame()
+def clear_all_cache():
+    get_inventory.clear()
+    get_customers.clear()
+    get_sales.clear()
 
-def clear_cache():
-    """وظيفة لتنظيف الكاش عند إجراء تعديل لإجبار البرنامج على جلب بيانات جديدة"""
-    get_inventory_data.clear()
-    get_customers_data.clear()
-    get_sales_data.clear()
-
-def get_baghdad_time():
+def get_time():
     return datetime.now(pytz.timezone('Asia/Baghdad'))
 
-# --- 4. واجهة التطبيق (Modules) ---
-
-# تهيئة الجلسة
+# --- 4. Session State Management ---
 if 'cart' not in st.session_state: st.session_state.cart = []
-if 'page' not in st.session_state: st.session_state.page = 'pos'
+if 'db_inited' not in st.session_state:
+    init_db()
+    st.session_state.db_inited = True
 
-# --- القائمة الجانبية (Navigation) ---
+# --- 5. LOGIC CONTROLLERS (Callbacks) ---
+# Using callbacks makes the app 2x faster by avoiding full reruns for logic
+
+def add_to_cart_callback():
+    """Logic to add item to cart without blocking"""
+    selection = st.session_state.get('pos_selection')
+    if not selection: return
+    
+    # Identify product from string
+    df = get_inventory()
+    prod_name = selection.split(" | ")[0]
+    prod_color = selection.split(" | ")[1].split(" (")[0]
+    
+    item_row = df[(df['name'] == prod_name) & (df['color'] == prod_color)].iloc[0]
+    
+    qty = st.session_state.get('pos_qty', 1)
+    price = st.session_state.get('pos_price', item_row['price'])
+    
+    cart_item = {
+        "id": int(item_row['id']),
+        "name": item_row['name'],
+        "color": item_row['color'],
+        "size": item_row['size'],
+        "price": price,
+        "qty": qty,
+        "cost": float(item_row['cost']),
+        "total": price * qty
+    }
+    st.session_state.cart.append(cart_item)
+    st.toast(f"🛒 أضيف: {item_row['name']}", icon="✅")
+
+def remove_from_cart_callback(idx):
+    st.session_state.cart.pop(idx)
+
+def checkout_callback():
+    """Handles the checkout logic efficiently in one go"""
+    if not st.session_state.cart:
+        st.error("السلة فارغة")
+        return
+
+    cust_name = st.session_state.get('c_name')
+    if not cust_name and st.session_state.get('c_select') == "عميل جديد":
+        st.error("يجب إدخال اسم العميل")
+        return
+
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            # 1. Handle Customer
+            cust_id = None
+            if st.session_state.c_select == "عميل جديد":
+                cur.execute("INSERT INTO public.customers (name, phone, address, username) VALUES (%s, %s, %s, %s) RETURNING id", 
+                           (st.session_state.c_name, st.session_state.c_phone, st.session_state.c_addr, st.session_state.c_name))
+                cust_id = cur.fetchone()[0]
+                customer_display = st.session_state.c_name
+                customer_addr = st.session_state.c_addr
+            else:
+                df_cust = get_customers()
+                cust_data = df_cust[df_cust['name'] == st.session_state.c_select].iloc[0]
+                cust_id = int(cust_data['id'])
+                customer_display = cust_data['name']
+                customer_addr = cust_data['address']
+
+            # 2. Prepare Batch Data
+            inv_id = get_time().strftime("%Y%m%d%H%M")
+            sales_data = []
+            
+            for item in st.session_state.cart:
+                # Update Stock (Directly)
+                cur.execute("UPDATE public.variants SET stock = stock - %s WHERE id = %s", (item['qty'], item['id']))
+                
+                # Prepare Sale Record
+                profit = (item['price'] - item['cost']) * item['qty']
+                sales_data.append((
+                    cust_id, item['id'], item['name'], item['qty'], item['total'], 
+                    profit, get_time(), inv_id, st.session_state.c_dur
+                ))
+
+            # 3. Batch Insert Sales
+            execute_values(cur, """
+                INSERT INTO public.sales (customer_id, variant_id, product_name, qty, total, profit, date, invoice_id, delivery_duration)
+                VALUES %s
+            """, sales_data)
+
+            conn.commit()
+            
+            # 4. Generate Invoice Text
+            msg = f"🧾 فاتورة ({inv_id})\n👤 {customer_display}\n" + "-"*20 + "\n"
+            total = 0
+            for it in st.session_state.cart:
+                msg += f"▫️ {it['name']} ({it['color']}) x{it['qty']} = {it['total']:,.0f}\n"
+                total += it['total']
+            msg += "-"*20 + f"\n💰 الإجمالي: {total:,.0f} د.ع\n📍 {customer_addr}"
+            
+            st.session_state.last_inv = msg
+            st.session_state.cart = []
+            clear_all_cache()
+            
+    except Exception as e:
+        conn.rollback()
+        st.error(f"فشلت العملية: {e}")
+
+# --- 6. Main Layout ---
+
 with st.sidebar:
+    st.image("https://cdn-icons-png.flaticon.com/512/3144/3144456.png", width=50) # Placeholder Icon
     st.markdown("### 🌸 نواعم بوتيك")
-    st.markdown("---")
-    
-    page = st.radio("القائمة الرئيسية", 
-             ["🛒 نقطة البيع", "📦 إدارة المخزون", "👥 العملاء", "📝 السجل والرواجع", "📊 التقارير", "💸 المصاريف"],
-             label_visibility="collapsed"
-    )
+    page = st.radio("التنقل", ["🛒 نقطة البيع", "📦 المخزون", "📊 التقارير", "👥 العملاء", "📜 السجل", "💸 المصاريف"])
     
     st.markdown("---")
-    if st.button("🔄 تحديث البيانات", help="اضغط هنا إذا أجريت تعديلاً ولا يظهر"):
-        clear_cache()
-        st.toast("✅ تم تحديث البيانات بنجاح")
-        time.sleep(0.5)
+    if st.button("🔄 تحديث النظام", use_container_width=True):
+        clear_all_cache()
         st.rerun()
 
-# --- الصفحة 1: نقطة البيع (POS) ---
-if "نقطة البيع" in page:
-    st.title("🛒 نقطة البيع السريع")
-    
-    col_products, col_cart = st.columns([2, 1.2]) # تقسيم الشاشة: منتجات (يسار) وسلة (يمين)
+# === PAGE: POS ===
+if page == "🛒 نقطة البيع":
+    col_pos, col_cart = st.columns([1.8, 1.2], gap="large")
 
-    # --- قسم المنتجات ---
-    with col_products:
-        df_inv = get_inventory_data()
+    with col_pos:
+        st.subheader("🔍 البحث والمنتجات")
+        df_inv = get_inventory()
         
-        # فلتر ذكي سريع
         if not df_inv.empty:
             df_active = df_inv[df_inv['stock'] > 0].copy()
-            df_active['display_name'] = df_active['name'] + " | " + df_active['color'] + " (" + df_active['size'] + ")"
+            df_active['display'] = df_active['name'] + " | " + df_active['color'] + " (" + df_active['size'] + ")"
             
-            search_val = st.selectbox("🔍 ابحث عن منتج (اكتب الاسم أو اللون)", 
-                                      options=df_active['display_name'].tolist(),
-                                      index=None,
-                                      placeholder="ابحث هنا...")
-            
-            if search_val:
-                # العثور على المنتج المختار بسرعة
-                selected_item = df_active[df_active['display_name'] == search_val].iloc[0]
+            # Smart Search Box
+            selected_product = st.selectbox(
+                "اختر المنتج:", 
+                options=df_active['display'].tolist(), 
+                index=None, 
+                key="pos_selection",
+                placeholder="اكتب اسم المنتج أو اللون..."
+            )
+
+            if selected_product:
+                # Instant lookup from dataframe (RAM is faster than SQL)
+                item = df_active[df_active['display'] == selected_product].iloc[0]
                 
-                with st.form("add_to_cart_form", clear_on_submit=True):
-                    st.markdown(f"**{selected_item['name']}** - {selected_item['color']}")
+                with st.container():
                     c1, c2, c3 = st.columns(3)
-                    qty = c1.number_input("العدد", min_value=1, max_value=int(selected_item['stock']), value=1)
-                    price = c2.number_input("سعر البيع", value=float(selected_item['price']))
-                    c3.markdown(f"<br><span style='color:#888'>متوفر: {selected_item['stock']}</span>", unsafe_allow_html=True)
+                    c1.metric("المتوفر", f"{item['stock']} قطعة")
+                    c2.metric("السعر الأساسي", f"{item['price']:,.0f}")
+                    c3.metric("القياس", item['size'])
+                
+                # Add Form
+                with st.container():
+                    cc1, cc2 = st.columns(2)
+                    cc1.number_input("الكمية", min_value=1, max_value=int(item['stock']), value=1, key="pos_qty")
+                    cc2.number_input("سعر البيع (قابل للتعديل)", value=float(item['price']), key="pos_price")
                     
-                    if st.form_submit_button("🛒 إضافة للسلة", type="primary", use_container_width=True):
-                        item = {
-                            "id": int(selected_item['id']),
-                            "name": selected_item['name'],
-                            "color": selected_item['color'],
-                            "size": selected_item['size'],
-                            "price": price,
-                            "qty": qty,
-                            "cost": float(selected_item['cost']),
-                            "total": price * qty
-                        }
-                        st.session_state.cart.append(item)
-                        st.toast(f"تمت إضافة {selected_item['name']}", icon="✅")
-                        st.rerun()
+                    st.button("➕ إضافة للسلة", type="primary", use_container_width=True, on_click=add_to_cart_callback)
 
-    # --- قسم السلة والدفع ---
     with col_cart:
-        st.markdown("### 🧾 الفاتورة الحالية")
-        with st.container(border=True):
+        st.subheader("🧾 الفاتورة")
+        
+        # Cart Visuals
+        total_bill = sum(item['total'] for item in st.session_state.cart)
+        
+        with st.container():
+            st.markdown(f"""
+            <div style="text-align: center; padding: 10px; background: rgba(212, 136, 150, 0.1); border-radius: 10px;">
+                <span style="font-size: 14px; color: #888;">الإجمالي النهائي</span><br>
+                <span style="font-size: 32px; font-weight: bold; color: #D48896;">{total_bill:,.0f} <span style="font-size:16px">د.ع</span></span>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            st.markdown("---")
+            
             if not st.session_state.cart:
-                st.info("السلة فارغة")
+                st.info("السلة فارغة حالياً")
             else:
-                total_bill = 0
-                for idx, item in enumerate(st.session_state.cart):
-                    c_nm, c_pr, c_del = st.columns([3, 2, 1])
-                    c_nm.text(f"{item['name']} ({item['qty']})")
-                    c_nm.caption(f"{item['color']} | {item['size']}")
-                    c_pr.text(f"{item['total']:,.0f}")
-                    if c_del.button("❌", key=f"del_{idx}"):
-                        st.session_state.cart.pop(idx)
-                        st.rerun()
-                    total_bill += item['total']
+                for i, item in enumerate(st.session_state.cart):
+                    c_txt, c_del = st.columns([4, 1])
+                    c_txt.markdown(f"**{item['name']}** ({item['qty']}) - <span style='color:#D48896'>{item['total']:,.0f}</span>", unsafe_allow_html=True)
+                    c_txt.caption(f"{item['color']} | {item['size']}")
+                    c_del.button("✖", key=f"del_{i}", on_click=remove_from_cart_callback, args=(i,))
+                    st.divider()
+
+            # Checkout Section
+            with st.expander("👤 بيانات العميل والدفع", expanded=True if st.session_state.cart else False):
+                df_cust = get_customers()
+                cust_opts = ["عميل جديد"] + df_cust['name'].tolist()
+                st.selectbox("العميل", cust_opts, key="c_select")
                 
-                st.markdown("---")
-                st.markdown(f"<h3 style='text-align: center; color: var(--primary);'>{total_bill:,.0f} د.ع</h3>", unsafe_allow_html=True)
+                if st.session_state.c_select == "عميل جديد":
+                    st.text_input("الاسم", key="c_name")
+                    st.text_input("الهاتف", key="c_phone")
+                    st.text_input("العنوان", key="c_addr")
+                else:
+                    # Auto-fill visual (read-only for info)
+                    curr_c = df_cust[df_cust['name'] == st.session_state.c_select].iloc[0]
+                    st.caption(f"📞 {curr_c['phone']} | 📍 {curr_c['address']}")
+
+                st.selectbox("التوصيل", ["24 ساعة", "48 ساعة", "فوري"], key="c_dur")
                 
-                # إتمام البيع
-                with st.expander("👤 بيانات العميل والدفع", expanded=True):
-                    df_cust = get_customers_data()
-                    cust_options = ["عميل جديد"] + df_cust['name'].tolist() if not df_cust.empty else ["عميل جديد"]
-                    cust_selection = st.selectbox("اختر العميل", cust_options)
-                    
-                    cust_name, cust_phone, cust_addr = "", "", ""
-                    
-                    if cust_selection == "عميل جديد":
-                        cust_name = st.text_input("الاسم")
-                        cust_phone = st.text_input("الهاتف")
-                        cust_addr = st.text_input("العنوان")
-                    else:
-                        cust_data = df_cust[df_cust['name'] == cust_selection].iloc[0]
-                        cust_name = cust_data['name']
-                        cust_phone = cust_data['phone']
-                        cust_addr = cust_data['address']
-                        st.caption(f"📍 {cust_addr} | 📞 {cust_phone}")
+                if st.button("✅ إتمام البيع", type="primary", use_container_width=True, on_click=checkout_callback):
+                    pass # Logic handled in callback
 
-                    del_dur = st.selectbox("مدة التوصيل", ["24 ساعة", "48 ساعة", "3 أيام"], index=1)
+        # Invoice Result Modal
+        if 'last_inv' in st.session_state:
+            st.success("تمت العملية بنجاح!")
+            st.text_area("نص الفاتورة (للنسخ)", st.session_state.last_inv, height=150)
+            if st.button("إغلاق وبدء جديد"):
+                del st.session_state.last_inv
+                st.rerun()
 
-                    if st.button("✅ تأكيد البيع وطباعة", type="primary", use_container_width=True):
-                        if not st.session_state.cart:
-                            st.warning("السلة فارغة!"); st.stop()
-                        if not cust_name:
-                            st.warning("اسم العميل مطلوب!"); st.stop()
-                            
-                        # تنفيذ البيع (DB Transaction)
-                        try:
-                            with conn.cursor() as cur:
-                                # معالجة العميل
-                                cust_id = None
-                                if cust_selection == "عميل جديد":
-                                    cur.execute("INSERT INTO public.customers (name, phone, address, username) VALUES (%s, %s, %s, %s) RETURNING id", 
-                                                (cust_name, cust_phone, cust_addr, cust_name))
-                                    cust_id = cur.fetchone()[0]
-                                else:
-                                    cust_id = int(cust_data['id'])
-                                
-                                inv_id = get_baghdad_time().strftime("%Y%m%d%H%M")
-                                
-                                for item in st.session_state.cart:
-                                    # تحديث المخزون
-                                    cur.execute("UPDATE public.variants SET stock = stock - %s WHERE id = %s", (item['qty'], item['id']))
-                                    # تسجيل البيع
-                                    profit = (item['price'] - item['cost']) * item['qty']
-                                    cur.execute("""INSERT INTO public.sales 
-                                        (customer_id, variant_id, product_name, qty, total, profit, date, invoice_id, delivery_duration)
-                                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-                                        (cust_id, item['id'], item['name'], item['qty'], item['total'], profit, get_baghdad_time(), inv_id, del_dur))
-                                
-                                conn.commit()
-                                
-                                # إعداد رسالة الفاتورة
-                                msg = f"فاتورة طلبية ({inv_id})\nالعميل: {cust_name}\n"
-                                for it in st.session_state.cart:
-                                    msg += f"- {it['name']} ({it['color']}) x{it['qty']} = {it['total']:,.0f}\n"
-                                msg += f"\nالإجمالي: {total_bill:,.0f} د.ع\nالعنوان: {cust_addr}"
-                                
-                                st.session_state.last_inv = msg
-                                st.session_state.cart = []
-                                clear_cache() # تحديث البيانات فوراً
-                                st.toast("تمت عملية البيع بنجاح!", icon="🎉")
-                                st.balloons()
-                                st.rerun()
-                                
-                        except Exception as e:
-                            conn.rollback()
-                            st.error(f"حدث خطأ: {e}")
-
-    if 'last_inv' in st.session_state:
-        st.success("تم الحفظ! انسخ الفاتورة:")
-        st.code(st.session_state.last_inv)
-        if st.button("طلب جديد"):
-            del st.session_state.last_inv
-            st.rerun()
-
-# --- الصفحة 2: إدارة المخزون (Excel Style) ---
-elif "إدارة المخزون" in page:
-    st.title("📦 المخزن (تعديل سريع)")
+# === PAGE: INVENTORY ===
+elif page == "📦 المخزون":
+    st.title("📦 إدارة المخزون")
     
-    # 1. إضافة صنف جديد
-    with st.expander("➕ إضافة منتج جديد", expanded=False):
-        with st.form("new_prod"):
-            c1, c2, c3, c4 = st.columns(4)
+    # Add Product
+    with st.expander("➕ إضافة منتج جديد"):
+        with st.form("new_inv"):
+            c1, c2, c3, c4, c5, c6 = st.columns(6)
             n = c1.text_input("الاسم")
             co = c2.text_input("اللون")
             sz = c3.text_input("القياس")
             stk = c4.number_input("العدد", 1)
-            c5, c6 = st.columns(2)
             cost = c5.number_input("التكلفة", 0.0)
-            price = c6.number_input("سعر البيع", 0.0)
+            pr = c6.number_input("البيع", 0.0)
             if st.form_submit_button("حفظ"):
-                try:
-                    with conn.cursor() as cur:
-                        cur.execute("INSERT INTO public.variants (name, color, size, stock, cost, price) VALUES (%s,%s,%s,%s,%s,%s)",
-                                    (n, co, sz, int(stk), float(cost), float(price)))
-                        conn.commit()
-                    clear_cache()
-                    st.success("تمت الإضافة")
-                except: st.error("خطأ")
+                run_query("INSERT INTO public.variants (name, color, size, stock, cost, price) VALUES (%s,%s,%s,%s,%s,%s)", 
+                          (n, co, sz, stk, cost, pr), commit=True, fetch=False)
+                clear_all_cache()
+                st.rerun()
 
-    # 2. تعديل البيانات (Excel Style)
-    st.markdown("### ✏️ تعديل الكميات والأسعار")
-    df = get_inventory_data()
-    
+    # Edit Product (Excel Style)
+    df = get_inventory()
     if not df.empty:
-        # Data Editor allows direct edits!
         edited_df = st.data_editor(
             df,
             column_config={
-                "id": None, # Hide ID
+                "id": None,
                 "name": "الاسم",
                 "color": "اللون",
-                "size": "القياس",
                 "stock": st.column_config.NumberColumn("المخزون", min_value=0, required=True),
-                "price": st.column_config.NumberColumn("سعر البيع", format="%d IQD"),
-                "cost": st.column_config.NumberColumn("التكلفة", format="%d IQD"),
+                "price": st.column_config.NumberColumn("السعر", format="%d IQD"),
             },
             use_container_width=True,
             num_rows="fixed",
-            key="inventory_editor"
+            key="inv_editor"
         )
         
-        if st.button("💾 حفظ التغييرات في الجدول", type="primary"):
-            # هذا الجزء معقد قليلاً، لمعرفة ما تغير، لكن سنقوم بتحديث الكل للأمان والسرعة في التطوير
-            # الأفضل هو مقارنة df بـ edited_df وتحديث المتغير فقط
-            try:
-                # تحويل إلى tuples للتحديث السريع
-                data_to_update = []
-                for i, row in edited_df.iterrows():
-                    # نقارن مع البيانات الأصلية لتحديث المتغير فقط (Optimized)
-                    orig_row = df.iloc[i]
-                    if (row['stock'] != orig_row['stock']) or (row['price'] != orig_row['price']) or (row['cost'] != orig_row['cost']):
-                        data_to_update.append((int(row['stock']), float(row['price']), float(row['cost']), int(row['id'])))
-                
-                if data_to_update:
-                    with conn.cursor() as cur:
-                        cur.executemany("UPDATE public.variants SET stock=%s, price=%s, cost=%s WHERE id=%s", data_to_update)
-                        conn.commit()
-                    clear_cache()
-                    st.toast(f"تم تحديث {len(data_to_update)} منتج", icon="✅")
-                    time.sleep(1)
-                    st.rerun()
-                else:
-                    st.info("لم تقم بتغيير أي شيء")
-            except Exception as e:
-                st.error(f"خطأ: {e}")
+        if st.button("💾 حفظ التغييرات"):
+            # Intelligent update logic
+            changes = []
+            for i, row in edited_df.iterrows():
+                orig = df.iloc[i]
+                # Compare critical fields
+                if (row['stock'] != orig['stock']) or (row['price'] != orig['price']) or (row['cost'] != orig['cost']):
+                    changes.append((int(row['stock']), float(row['price']), float(row['cost']), int(row['id'])))
+            
+            if changes:
+                conn = get_db_connection()
+                with conn.cursor() as cur:
+                    execute_values(cur, "UPDATE public.variants SET stock = data.stock, price = data.price, cost = data.cost FROM (VALUES %s) AS data (stock, price, cost, id) WHERE variants.id = data.id", changes)
+                    conn.commit()
+                clear_all_cache()
+                st.success(f"تم تحديث {len(changes)} صف")
+                time.sleep(1)
+                st.rerun()
 
-# --- الصفحة 3: التقارير (Dashboard) ---
-elif "التقارير" in page:
-    st.title("📊 لوحة المعلومات (Dashboard)")
+# === PAGE: DASHBOARD ===
+elif page == "📊 التقارير":
+    st.title("📊 لوحة القيادة")
+    df_s = get_sales(1000)
     
-    # جلب البيانات
-    df_sales = get_sales_data(limit=1000)
-    
-    if not df_sales.empty:
-        df_sales['date'] = pd.to_datetime(df_sales['date'])
-        
-        # فلتر اليوم
+    if not df_s.empty:
+        df_s['date'] = pd.to_datetime(df_s['date'])
         today = pd.Timestamp.now().normalize()
-        sales_today = df_sales[df_sales['date'] >= today]
+        daily = df_s[df_s['date'] >= today]
         
-        # إحصائيات سريعة
-        c1, c2, c3, c4 = st.columns(4)
+        # Metrics
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("مبيعات اليوم", f"{daily['total'].sum():,.0f}")
+        m2.metric("عدد الطلبات", len(daily))
+        m3.metric("الأرباح", f"{daily['profit'].sum():,.0f}")
+        m4.metric("متوسط الطلب", f"{daily['total'].mean() if not daily.empty else 0:,.0f}")
         
-        with c1:
-            st.markdown('<div class="metric-card"><div class="metric-label">مبيعات اليوم</div><div class="metric-value">{:,.0f}</div></div>'.format(sales_today['total'].sum()), unsafe_allow_html=True)
-        with c2:
-            st.markdown('<div class="metric-card"><div class="metric-label">عدد الطلبات</div><div class="metric-value">{}</div></div>'.format(len(sales_today)), unsafe_allow_html=True)
-        with c3:
-            st.markdown('<div class="metric-card"><div class="metric-label">أرباح اليوم</div><div class="metric-value">{:,.0f}</div></div>'.format(sales_today['profit'].sum()), unsafe_allow_html=True)
-        with c4:
-            avg = sales_today['total'].mean() if not sales_today.empty else 0
-            st.markdown('<div class="metric-card"><div class="metric-label">متوسط السلة</div><div class="metric-value">{:,.0f}</div></div>'.format(avg), unsafe_allow_html=True)
-
         st.markdown("---")
         
-        col_charts1, col_charts2 = st.columns(2)
-        with col_charts1:
-            st.subheader("📈 المبيعات بمرور الوقت")
-            # تجميع حسب اليوم
-            daily_sales = df_sales.groupby(df_sales['date'].dt.date)['total'].sum()
-            st.line_chart(daily_sales, color="#D48896")
-            
-        with col_charts2:
-            st.subheader("🏆 المنتجات الأكثر مبيعاً")
-            top_products = df_sales.groupby('product_name')['qty'].sum().sort_values(ascending=False).head(5)
-            st.bar_chart(top_products, color="#D48896")
+        # Charts
+        c1, c2 = st.columns(2)
+        with c1:
+            st.caption("اتجاه المبيعات (آخر 7 أيام)")
+            trend = df_s.groupby(df_s['date'].dt.date)['total'].sum()
+            st.line_chart(trend, color="#D48896")
+        
+        with c2:
+            st.caption("أفضل المنتجات")
+            top = df_s.groupby('product_name')['qty'].sum().nlargest(5)
+            st.bar_chart(top, color="#2C2C2C")
 
-    else:
-        st.info("لا توجد بيانات مبيعات كافية")
+# === PAGE: OTHER ===
+elif page == "👥 العملاء":
+    st.title("دليل العملاء")
+    st.dataframe(get_customers(), use_container_width=True)
 
-# --- الصفحات الأخرى (بشكل مبسط وسريع) ---
-elif "العملاء" in page:
-    st.title("👥 قاعدة بيانات العملاء")
-    df_c = get_customers_data()
-    st.dataframe(df_c, use_container_width=True, hide_index=True)
+elif page == "💸 المصاريف":
+    st.title("تسجيل المصاريف")
+    with st.form("ex"):
+        a = st.number_input("المبلغ")
+        r = st.text_input("السبب")
+        if st.form_submit_button("حفظ"):
+            run_query("INSERT INTO public.expenses (amount, reason, date) VALUES (%s,%s,%s)", (a, r, get_time()), commit=True, fetch=False)
+            st.success("تم")
 
-elif "المصاريف" in page:
-    st.title("💸 المصاريف")
-    with st.form("exp"):
-        amount = st.number_input("المبلغ", 0.0)
-        reason = st.text_input("السبب")
-        if st.form_submit_button("تسجيل"):
-            with conn.cursor() as cur:
-                cur.execute("INSERT INTO public.expenses (amount, reason, date) VALUES (%s,%s,%s)", (amount, reason, get_baghdad_time()))
-                conn.commit()
-            st.success("تم التسجيل")
-            
-elif "السجل والرواجع" in page:
-    st.title("📝 سجل المبيعات")
-    df_s = get_sales_data(limit=50)
+elif page == "📜 السجل":
+    st.title("سجل العمليات")
+    df = get_sales(100)
+    st.dataframe(df, use_container_width=True)
     
-    # عرض الجدول مع إمكانية التفاعل
-    for i, row in df_s.iterrows():
-        with st.container(border=True):
-            col_info, col_btn = st.columns([4, 1])
-            col_info.markdown(f"**{row['product_name']}** (x{row['qty']}) - {row['total']:,.0f} د.ع")
-            col_info.caption(f"📅 {row['date']} | 🆔 {row['invoice_id']}")
-            
-            if col_btn.button("↩️ إرجاع", key=f"ret_{row['id']}"):
-                # منطق الإرجاع المبسط
-                try:
-                    with conn.cursor() as cur:
-                        # 1. إرجاع للمخزن
-                        cur.execute("UPDATE public.variants SET stock = stock + %s WHERE id = %s", (row['qty'], row['variant_id']))
-                        # 2. تسجيل كمرتجع
-                        cur.execute("INSERT INTO public.returns (sale_id, product_name, qty, return_amount, return_date, status) VALUES (%s,%s,%s,%s,%s,%s)",
-                                    (row['id'], row['product_name'], row['qty'], row['total'], get_baghdad_time(), 'Received'))
-                        # 3. حذف أو تعديل البيع (اختياري، هنا سنبقيه للسجل لكن نسجل مصروف عكسي)
-                        cur.execute("INSERT INTO public.expenses (amount, reason, date) VALUES (%s,%s,%s)", (row['total'], f"إرجاع فاتورة #{row['id']}", get_baghdad_time()))
-                        conn.commit()
-                    clear_cache()
-                    st.toast("تم إرجاع القطعة للمخزن", icon="↩️")
-                    time.sleep(1)
-                    st.rerun()
-                except Exception as e: st.error(f"خطأ: {e}")
-
-# تهيئة قاعدة البيانات عند أول تشغيل
-if 'db_inited' not in st.session_state:
-    init_db()
-    st.session_state.db_inited = True
+    # Return Logic Helper
+    st.markdown("### ↩️ إدارة الرواجع")
+    sale_id = st.number_input("أدخل رقم العملية (ID) للإرجاع", min_value=1, step=1)
+    if st.button("استرجاع بيانات العملية"):
+        sale = df[df['id'] == sale_id]
+        if not sale.empty:
+            st.write(sale)
+            if st.button("تأكيد الإرجاع للمخزن"):
+                row = sale.iloc[0]
+                run_query("UPDATE public.variants SET stock = stock + %s WHERE id = %s", (int(row['qty']), int(row['variant_id'])), commit=True, fetch=False)
+                run_query("INSERT INTO public.returns (sale_id, product_name, qty, return_amount, return_date, status) VALUES (%s,%s,%s,%s,%s,%s)", 
+                          (int(row['id']), row['product_name'], int(row['qty']), float(row['total']), get_time(), 'Returned'), commit=True, fetch=False)
+                st.success("تم الإرجاع")
+                clear_all_cache()
+        else:
+            st.error("غير موجود")
