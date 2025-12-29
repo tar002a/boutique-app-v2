@@ -5,49 +5,65 @@ import pytz
 import psycopg2
 import time
 
-# --- 1. إعداد الصفحة (يجب أن يكون أول سطر) ---
-# initial_sidebar_state="expanded" مهم جداً لظهور القائمة
-st.set_page_config(page_title="Nawaem POS 🚀", layout="wide", page_icon="🛍️", initial_sidebar_state="expanded")
+# --- 1. إعداد الصفحة (مهم جداً أن تكون expanded) ---
+st.set_page_config(
+    page_title="Nawaem POS 🚀", 
+    layout="wide", 
+    page_icon="🛍️", 
+    initial_sidebar_state="expanded"
+)
 
-# --- 2. CSS وتصميم UI وإصلاح RTL للقائمة ---
+# --- 2. CSS الإصلاح الجذري (Safe RTL Mode) ---
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;800&display=swap');
     
-    /* تطبيق الخط على كل العناصر */
-    * { font-family: 'Cairo', sans-serif !important; }
-
-    /* خلفية التطبيق */
-    .stApp { background-color: #121212; }
-
-    /* --- إصلاح اتجاه العربي والقائمة الجانبية --- */
-    /* نجعل المحتوى فقط يمين-يسار وليس هيكل الصفحة كاملة */
-    [data-testid="stSidebar"], .stMain {
-        direction: rtl;
-        text-align: right;
+    /* 1. إجبار هيكل التطبيق أن يكون يسار-يمين لكي لا يختفي البار */
+    .stApp {
+        direction: ltr !important;
+        font-family: 'Cairo', sans-serif !important;
     }
-    
-    /* إصلاح المحاذاة للنصوص */
-    p, h1, h2, h3, h4, h5, h6, span, div, label, .stButton, .stTextInput, .stNumberInput, .stSelectbox {
+
+    /* 2. قلب النصوص والمحتوى فقط داخل البار الجانبي والصفحة الرئيسية */
+    [data-testid="stSidebarUserContent"], 
+    .stMain .block-container {
+        direction: rtl !important;
         text-align: right !important;
     }
 
-    /* إصلاح حقول الإدخال */
-    .stTextInput input, .stNumberInput input, .stSelectbox div[data-baseweb="select"] {
-        direction: rtl;
-        text-align: right;
+    /* 3. إصلاح المحاذاة لكل العناصر النصية */
+    p, h1, h2, h3, h4, h5, h6, span, div, label, .stMarkdown {
+        text-align: right !important;
+    }
+
+    /* 4. إصلاح حقول الإدخال والأزرار */
+    .stTextInput input, 
+    .stNumberInput input, 
+    .stSelectbox div[data-baseweb="select"], 
+    textarea {
+        direction: rtl !important;
+        text-align: right !important;
         background-color: #2C2C2E !important;
         color: white !important;
         border-radius: 10px !important;
     }
 
-    /* --- تصميم بطاقات المنتجات --- */
+    /* 5. إصلاح خاص للأزرار لتبدو عربية */
+    .stButton button {
+        width: 100%;
+        border-radius: 12px !important;
+        font-weight: 700 !important;
+        height: 45px;
+    }
+
+    /* 6. تصميم البطاقات */
     .product-card {
         background-color: #1E1E1E;
         border: 1px solid #333;
         border-radius: 16px;
         padding: 15px;
-        text-align: center;
+        text-align: right; /* محاذاة لليمين */
+        direction: rtl;    /* اتجاه لليمين */
         transition: transform 0.2s;
         height: 100%;
         display: flex;
@@ -59,31 +75,16 @@ st.markdown("""
         transform: translateY(-5px);
         box-shadow: 0 4px 20px rgba(0,0,0,0.3);
     }
-    .price-tag {
-        font-size: 1.2rem;
-        font-weight: 800;
-        color: #B76E79;
-        margin: 8px 0;
-    }
-    .stock-tag {
-        font-size: 0.8rem;
-        color: #A0A0A0;
-        background: #2c2c2e;
-        padding: 2px 8px;
-        border-radius: 8px;
-    }
-
-    /* --- تنسيق الأزرار --- */
-    .stButton button {
-        border-radius: 12px !important;
-        font-weight: 700 !important;
-        height: 45px;
-        width: 100%;
-    }
     
-    /* إخفاء القوائم الافتراضية */
+    /* 7. إخفاء العناصر غير المرغوبة */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
+    
+    /* 8. إصلاح الكاردات المخصصة للـ Metric */
+    [data-testid="stMetricValue"], [data-testid="stMetricLabel"] {
+        text-align: right !important;
+        direction: rtl !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -94,11 +95,9 @@ if 'page' not in st.session_state: st.session_state.page = 0
 # --- 4. دوال قاعدة البيانات (Backend Logic) ---
 @st.cache_resource
 def init_connection():
-    # تأكد من وجود secrets.toml محلياً أو في إعدادات Streamlit Cloud
     return psycopg2.connect(**st.secrets["postgres"])
 
 def run_query(query, params=None, fetch_df=False):
-    """دالة مركزية لتنفيذ الاستعلامات بأمان"""
     conn = None
     try:
         conn = init_connection()
@@ -117,7 +116,6 @@ def run_query(query, params=None, fetch_df=False):
         st.toast(f"حدث خطأ: {e}", icon="❌")
         return None
 
-# دالة البحث السريع (Server-Side)
 def search_products_sql(search_term, limit=30):
     if not search_term:
         q = "SELECT id, name, color, size, price, stock FROM public.variants WHERE stock > 0 ORDER BY id DESC LIMIT %s"
@@ -133,21 +131,18 @@ def search_products_sql(search_term, limit=30):
         return run_query(q, (search_pattern, search_pattern, search_pattern, limit), fetch_df=True)
 
 # --- 5. واجهة المستخدم (UI Functions) ---
-
 def render_pos_tab():
-    """نقطة البيع"""
     col_products, col_cart = st.columns([3, 1.2])
 
-    # === قسم المنتجات ===
     with col_products:
         c1, c2 = st.columns([4, 1])
         search_txt = c1.text_input("🔍 بحث سريع...", key="pos_search", placeholder="اسم، لون، أو قياس")
         c2.markdown(f"<div style='text-align:center; padding-top:25px; color:#666; font-size:0.8em'>Server Search Active</div>", unsafe_allow_html=True)
         
-        df = search_products_sql(search_txt, limit=21) # جلب 21 منتج
+        df = search_products_sql(search_txt, limit=21)
         
         if not df.empty:
-            cols = st.columns(3) # شبكة من 3 أعمدة
+            cols = st.columns(3)
             for idx, row in df.iterrows():
                 with cols[idx % 3]:
                     st.markdown(f"""
@@ -164,7 +159,6 @@ def render_pos_tab():
         else:
             st.warning("لا توجد نتائج مطابقة")
 
-    # === قسم السلة ===
     with col_cart:
         with st.container(border=True):
             st.markdown("### 🧾 الفاتورة")
@@ -180,7 +174,6 @@ def render_pos_tab():
                     with c_det:
                         st.markdown(f"**{item['name']}**")
                         st.caption(f"{item['color']} | {item['size']}")
-                        # تحديث الكمية
                         new_qty = st.number_input(f"qty_{pid}", 1, int(item['max_stock']), int(item['qty']), key=f"q_{pid}", label_visibility="collapsed")
                         if new_qty != item['qty']:
                             st.session_state.cart[pid]['qty'] = new_qty
@@ -193,7 +186,6 @@ def render_pos_tab():
                             st.rerun()
                     st.divider()
 
-                # المجموع والدفع
                 st.markdown(f"<h2 style='text-align:center; color:#B76E79;'>{total_cart:,.0f} د.ع</h2>", unsafe_allow_html=True)
                 
                 with st.form("checkout"):
@@ -229,12 +221,10 @@ def process_sale(name, phone, addr, duration):
     try:
         conn = init_connection()
         with conn.cursor() as cur:
-            # 1. العميل
             cur.execute("INSERT INTO public.customers (name, phone, address, username) VALUES (%s, %s, %s, %s) RETURNING id", 
                         (name, phone, addr, name))
             cust_id = cur.fetchone()[0]
             
-            # 2. الفاتورة
             tz = pytz.timezone('Asia/Baghdad')
             now = datetime.now(tz)
             inv_id = now.strftime("%Y%m%d%H%M")
@@ -261,7 +251,6 @@ def process_sale(name, phone, addr, duration):
 
 def render_inventory_tab():
     st.markdown("### 📦 إدارة المخزون (سريع)")
-    
     col1, col2 = st.columns([3, 1])
     with col1:
         q = st.text_input("بحث في المخزون...", key="inv_q")
@@ -269,7 +258,6 @@ def render_inventory_tab():
         if st.button("➕ صنف جديد", type="primary", use_container_width=True):
             add_product_dialog()
 
-    # Pagination Logic
     PAGE_SIZE = 15
     offset = st.session_state.page * PAGE_SIZE
     
@@ -281,7 +269,6 @@ def render_inventory_tab():
         df = run_query(query, fetch_df=True)
         
     if not df.empty:
-        # عرض البيانات بشكل جدول قابل للتعديل (Read-Only حالياً للأمان والأداء)
         st.dataframe(
             df, 
             column_config={
@@ -291,7 +278,6 @@ def render_inventory_tab():
             use_container_width=True, hide_index=True
         )
     
-    # أزرار التنقل بين الصفحات
     c_prev, c_curr, c_next = st.columns([1, 2, 1])
     if c_prev.button("السابق ⬅️") and st.session_state.page > 0:
         st.session_state.page -= 1
@@ -338,6 +324,7 @@ def render_dashboard():
 def main():
     with st.sidebar:
         st.title("نواعم بوتيك")
+        st.image("https://cdn-icons-png.flaticon.com/512/3144/3144456.png", width=80)
         page = st.radio("القائمة", ["🛒 بيع", "📦 مخزن", "📊 تقارير"])
         st.divider()
         if st.button("تحديث 🔄"): st.cache_data.clear(); st.rerun()
